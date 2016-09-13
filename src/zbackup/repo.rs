@@ -9,6 +9,7 @@ use rustc_serialize::hex::ToHex;
 
 use std::collections::HashMap;
 use std::fs;
+use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
@@ -16,7 +17,6 @@ use std::sync::Arc;
 
 use misc::*;
 
-use zbackup;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
@@ -61,32 +61,50 @@ impl Repository {
 
 		if storage_info.has_encryption_key () {
 
-			stderrln! (
-				"ENCRYPTION KEY SALT: {:?}",
-				storage_info.get_encryption_key ().get_salt ());
+			if password_file_path.is_none () {
 
-			stderrln! (
-				"ENCRYPTION KEY ROUNDS: {:?}",
-				storage_info.get_encryption_key ().get_rounds ());
+				return Err (
+					"Required password file not provided".to_string ());
 
-			stderrln! (
-				"ENCRYPTED KEY: {:?}",
-				storage_info.get_encryption_key ().get_encrypted_key ());
+			}
 
-			stderrln! (
-				"KEY CHECK INPUT: {:?}",
-				storage_info.get_encryption_key ().get_key_check_input ());
+			// read password from file
 
-			stderrln! (
-				"KEY CHECK HMAC: {:?}",
-				storage_info.get_encryption_key ().get_key_check_hmac ());
+			let mut password_file =
+				try! (
+					io_result (
+						File::open (
+							password_file_path.unwrap ())));
+
+			let mut password_string =
+				String::new ();
+
+			try! (
+				io_result (
+					password_file.read_to_string (
+						& mut password_string)));
+
+			// remove trailing newline
+
+			if password_string.ends_with ("\n") {
+
+				let password_length =
+					password_string.len ();
+
+				password_string.truncate (
+					password_length - 1);
+
+			}
+
+			let password_bytes =
+				password_string.as_bytes ();
 
 			// derive password key from password
 
 			let mut password_hmac =
 				crypto::hmac::Hmac::new (
 					crypto::sha1::Sha1::new (),
-					b"password");
+					password_bytes);
 
 			let mut password_result =
 				[0u8; KEY_SIZE];
@@ -96,10 +114,6 @@ impl Repository {
 				storage_info.get_encryption_key ().get_salt (),
 				storage_info.get_encryption_key ().get_rounds (),
 				& mut password_result);
-
-			stderrln! (
-				"PASSWORD RESULT: {:?}",
-				password_result);
 
 			// decrypt actual key using password key
 
@@ -113,10 +127,6 @@ impl Repository {
 			key_decryptor.decrypt_block (
 				& storage_info.get_encryption_key ().get_encrypted_key (),
 				& mut key_result);
-
-			stderrln! (
-				"KEY RESULT: {:?}",
-				key_result);
 
 			// derive check result to verify password
 
@@ -134,9 +144,17 @@ impl Repository {
 			check_hmac.raw_result (
 				& mut check_result);
 
-			stderrln! (
-				"SIGNED RESULT: {:?}",
-				check_result);
+			// error if the password does not verify
+
+			let expected_result =
+				storage_info.get_encryption_key ().get_key_check_hmac ();
+
+			if check_result != expected_result {
+
+				return Err (
+					"Incorrect password".to_string ());
+
+			}
 
 		}
 
@@ -238,7 +256,14 @@ impl Repository {
 					format! (
 						"{}/backups/{}",
 						& self.path,
-						backup_name)));
+						backup_name)
+				).or_else (
+					|error| {
+						stderrln! ("");
+						Err (error)
+					}
+				)
+			);
 
 		// expand backup data
 
