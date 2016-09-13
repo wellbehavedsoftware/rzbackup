@@ -1,3 +1,7 @@
+use crypto;
+use crypto::mac::Mac;
+use crypto::symmetriccipher::BlockDecryptor;
+
 use protobuf;
 use protobuf::stream::CodedInputStream;
 
@@ -12,9 +16,13 @@ use std::sync::Arc;
 
 use misc::*;
 
+use zbackup;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
+
+const KEY_SIZE: usize =
+	16;
 
 const CACHE_MAX_SIZE: usize =
 	0x10000;
@@ -26,6 +34,7 @@ pub struct MasterIndexEntry {
 
 pub struct Repository {
 	path: String,
+	storage_info: proto::StorageInfo,
 	master_index: HashMap <[u8; 24], MasterIndexEntry>,
 	chunk_cache: HashMap <[u8; 24], Arc <Vec <u8>>>,
 }
@@ -34,6 +43,7 @@ impl Repository {
 
 	pub fn open (
 		repository_path: & str,
+		password_file_path: Option <& str>,
 	) -> Result <Repository, String> {
 
 		// load info file
@@ -42,12 +52,93 @@ impl Repository {
 			"Loading repository {}",
 			repository_path);
 
-		let _storage_info =
+		let storage_info =
 			try! (
 				read_storage_info (
 					& format! (
 						"{}/info",
 						repository_path)));
+
+		if storage_info.has_encryption_key () {
+
+			stderrln! (
+				"ENCRYPTION KEY SALT: {:?}",
+				storage_info.get_encryption_key ().get_salt ());
+
+			stderrln! (
+				"ENCRYPTION KEY ROUNDS: {:?}",
+				storage_info.get_encryption_key ().get_rounds ());
+
+			stderrln! (
+				"ENCRYPTED KEY: {:?}",
+				storage_info.get_encryption_key ().get_encrypted_key ());
+
+			stderrln! (
+				"KEY CHECK INPUT: {:?}",
+				storage_info.get_encryption_key ().get_key_check_input ());
+
+			stderrln! (
+				"KEY CHECK HMAC: {:?}",
+				storage_info.get_encryption_key ().get_key_check_hmac ());
+
+			// derive password key from password
+
+			let mut password_hmac =
+				crypto::hmac::Hmac::new (
+					crypto::sha1::Sha1::new (),
+					b"password");
+
+			let mut password_result =
+				[0u8; KEY_SIZE];
+
+			crypto::pbkdf2::pbkdf2 (
+				& mut password_hmac,
+				storage_info.get_encryption_key ().get_salt (),
+				storage_info.get_encryption_key ().get_rounds (),
+				& mut password_result);
+
+			stderrln! (
+				"PASSWORD RESULT: {:?}",
+				password_result);
+
+			// decrypt actual key using password key
+
+			let key_decryptor =
+				crypto::aessafe::AesSafe128Decryptor::new (
+					& password_result);
+
+			let mut key_result =
+				[0u8; KEY_SIZE];
+
+			key_decryptor.decrypt_block (
+				& storage_info.get_encryption_key ().get_encrypted_key (),
+				& mut key_result);
+
+			stderrln! (
+				"KEY RESULT: {:?}",
+				key_result);
+
+			// derive check result to verify password
+
+			let mut check_hmac =
+				crypto::hmac::Hmac::new (
+					crypto::sha1::Sha1::new (),
+					& key_result);
+
+			check_hmac.input (
+				storage_info.get_encryption_key ().get_key_check_input ());
+
+			let mut check_result =
+				[0u8; 20];
+
+			check_hmac.raw_result (
+				& mut check_result);
+
+			stderrln! (
+				"SIGNED RESULT: {:?}",
+				check_result);
+
+		}
 
 		// load indexes
 
@@ -123,6 +214,7 @@ impl Repository {
 
 		Ok (Repository {
 			path: repository_path.to_string (),
+			storage_info: storage_info,
 			master_index: master_index,
 			chunk_cache: HashMap::new (),
 		})

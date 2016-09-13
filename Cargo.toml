@@ -18,7 +18,12 @@ include = [
 name = "rzbackup-server"
 path = "src/bin/server.rs"
 
+[[bin]]
+name = "rzbackup-restore"
+path = "src/bin/restore.rs"
+
 [dependencies]
 libc = '0.2'
 protobuf = '1.0'
+rust-crypto = '0.2'
 rustc-serialize = '0.3'
