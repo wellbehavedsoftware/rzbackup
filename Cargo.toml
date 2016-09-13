@@ -5,6 +5,10 @@ version = "0.1.0"
 authors = [
 	"James Pharaoh <james@pharaoh.uk>"
 ]
+license = "Apache-2.0"
+homepage = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-backup"
+repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-backup"
+readme = "README.md"
 
 [[bin]]
 name = "rzbackup-server"
