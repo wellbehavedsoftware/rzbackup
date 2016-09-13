@@ -1,0 +1,16 @@
+[package]
+name = "rzbackup"
+description = "RZBackup"
+version = "0.1.0"
+authors = [
+	"James Pharaoh <james@pharaoh.uk>"
+]
+
+[[bin]]
+name = "rzbackup-server"
+path = "src/bin/server.rs"
+
+[dependencies]
+libc = '0.2'
+protobuf = '1.0'
+rustc-serialize = '0.3'
