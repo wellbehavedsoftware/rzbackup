@@ -11,6 +11,7 @@ use std::io::SeekFrom;
 use misc::*;
 use compress::lzma;
 
+use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::proto;
 
@@ -88,15 +89,29 @@ pub fn read_storage_info <P: AsRef <Path>> (
 
 pub fn read_backup_file <P: AsRef <Path>> (
 	path: P,
+	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <proto::BackupInfo, String> {
 
 	// open file
 
-	let mut input =
-		try! (
-			io_result (
-				File::open (
-					path)));
+	let mut input: Box <Read> =
+		match key {
+
+		Some (key) =>
+			Box::new (
+				try! (
+					CryptoReader::open (
+						path,
+						key))),
+
+		None =>
+			Box::new (
+				try! (
+					io_result (
+						File::open (
+							path)))),
+
+	};
 
 	let mut coded_input_stream =
 		CodedInputStream::new (

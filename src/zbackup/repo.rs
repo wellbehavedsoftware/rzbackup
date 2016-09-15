@@ -13,6 +13,7 @@ use std::sync::Arc;
 use misc::*;
 
 use zbackup::crypto::*;
+use zbackup::data::*;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
@@ -30,6 +31,7 @@ pub struct Repository {
 	storage_info: proto::StorageInfo,
 	master_index: HashMap <[u8; 24], MasterIndexEntry>,
 	chunk_cache: HashMap <[u8; 24], Arc <Vec <u8>>>,
+	encryption_key: Option <[u8; KEY_SIZE]>,
 }
 
 impl Repository {
@@ -52,7 +54,7 @@ impl Repository {
 						"{}/info",
 						repository_path)));
 
-		let key =
+		let encryption_key =
 			if storage_info.has_encryption_key () {
 
 			if password_file_path.is_none () {
@@ -166,6 +168,7 @@ impl Repository {
 			storage_info: storage_info,
 			master_index: master_index,
 			chunk_cache: HashMap::new (),
+			encryption_key: encryption_key,
 		})
 
 	}
@@ -187,7 +190,8 @@ impl Repository {
 					format! (
 						"{}/backups/{}",
 						& self.path,
-						backup_name)
+						backup_name),
+					self.encryption_key,
 				).or_else (
 					|error| {
 						stderrln! ("");

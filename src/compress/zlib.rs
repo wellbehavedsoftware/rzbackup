@@ -25,7 +25,7 @@ struct ZlibStream {
 	data_type: i32,
 	adler: u64,
 	reserved: u64,
-	
+
 }
 
 #[ link (name = "z") ]
@@ -194,7 +194,7 @@ pub fn compress (
 			deflate (
 				& mut zlib_stream,
 				deflate_mode)
-				
+
 		};
 
 		unsafe {
