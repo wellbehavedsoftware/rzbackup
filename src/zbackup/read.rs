@@ -396,3 +396,4 @@ pub fn read_bundle <P: AsRef <Path>> (
 
 }
 
+// ex: noet ts=4 filetype=rust

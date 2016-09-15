@@ -13,10 +13,11 @@ fn main () {
 	let arguments: Vec <String> =
 		env::args ().collect ();
 
-	if arguments.len () != 3 {
+	if arguments.len () != 3
+	&& arguments.len () != 4 {
 
 		println! (
-			"Syntax: {} LISTEN-ADDRESS REPOSITORY",
+			"Syntax: {} LISTEN-ADDRESS REPOSITORY [PASSWORD-FILE]",
 			arguments [0]);
 
 		process::exit (1);
@@ -29,9 +30,17 @@ fn main () {
 	let repository_path =
 		& arguments [2];
 
+	let password_file_path: Option <& str> =
+		if arguments.len () >= 4 {
+			Some (& arguments [3])
+		} else {
+			None
+		};
+
 	let repository =
 		match Repository::open (
-			repository_path) {
+			repository_path,
+			password_file_path) {
 
 		Ok (repository) =>
 			repository,
