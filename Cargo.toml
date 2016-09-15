@@ -28,6 +28,7 @@ path = "src/bin/decrypt.rs"
 
 [dependencies]
 libc = '0.2'
+lru-cache = '0.0'
 protobuf = '1.0'
 rust-crypto = '0.2'
 rustc-serialize = '0.3'

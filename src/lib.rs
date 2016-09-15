@@ -1,5 +1,6 @@
 extern crate crypto;
 extern crate libc;
+extern crate lru_cache;
 extern crate protobuf;
 extern crate rustc_serialize;
 

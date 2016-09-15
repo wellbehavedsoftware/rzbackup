@@ -1,3 +1,5 @@
+use lru_cache::LruCache;
+
 use protobuf;
 use protobuf::stream::CodedInputStream;
 
@@ -30,7 +32,7 @@ pub struct Repository {
 	path: String,
 	storage_info: proto::StorageInfo,
 	master_index: HashMap <[u8; 24], MasterIndexEntry>,
-	chunk_cache: HashMap <[u8; 24], Arc <Vec <u8>>>,
+	chunk_cache: LruCache <[u8; 24], Arc <Vec <u8>>>,
 	encryption_key: Option <[u8; KEY_SIZE]>,
 }
 
@@ -168,7 +170,7 @@ impl Repository {
 			path: repository_path.to_string (),
 			storage_info: storage_info,
 			master_index: master_index,
-			chunk_cache: HashMap::new (),
+			chunk_cache: LruCache::new (CACHE_MAX_SIZE),
 			encryption_key: encryption_key,
 		})
 
@@ -429,12 +431,6 @@ impl Repository {
 
 		if ! self.chunk_cache.contains_key (& chunk_id) {
 
-			if self.chunk_cache.len () >= CACHE_MAX_SIZE {
-
-				self.chunk_cache.clear ();
-
-			}
-
 			let index_entry = match
 				self.master_index.get (& chunk_id) {
 
@@ -481,7 +477,7 @@ impl Repository {
 		}
 
 		let chunk_data =
-			self.chunk_cache.get (
+			self.chunk_cache.get_mut (
 				& chunk_id,
 			).unwrap ();
 
