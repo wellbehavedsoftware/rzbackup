@@ -63,9 +63,6 @@ fn main () {
 
 		Ok (repository) => {
 
-			stderrln! (
-				"Restore complete");
-
 			process::exit (0);
 
 		},

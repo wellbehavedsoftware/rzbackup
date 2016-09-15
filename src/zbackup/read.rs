@@ -3,10 +3,9 @@ use protobuf::stream::CodedInputStream;
 
 use std::fs::File;
 use std::path::Path;
+use std::io;
 use std::io::BufReader;
 use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
 
 use misc::*;
 use compress::lzma;
@@ -15,8 +14,8 @@ use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::proto;
 
-pub fn read_storage_info <P: AsRef <Path>> (
-	path: P,
+pub fn read_storage_info <PathRef: AsRef <Path>> (
+	path: PathRef,
 ) -> Result <proto::StorageInfo, String> {
 
 	// open file
@@ -87,31 +86,19 @@ pub fn read_storage_info <P: AsRef <Path>> (
 
 }
 
-pub fn read_backup_file <P: AsRef <Path>> (
-	path: P,
+pub fn read_backup_file <PathRef: AsRef <Path>> (
+	path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <proto::BackupInfo, String> {
 
 	// open file
 
-	let mut input: Box <Read> =
-		match key {
-
-		Some (key) =>
-			Box::new (
-				try! (
-					CryptoReader::open (
-						path,
-						key))),
-
-		None =>
-			Box::new (
-				try! (
-					io_result (
-						File::open (
-							path)))),
-
-	};
+	let mut input =
+		try! (
+			io_result (
+				open_file_with_crypto (
+					path,
+					key)));
 
 	let mut coded_input_stream =
 		CodedInputStream::new (
@@ -173,8 +160,9 @@ pub fn read_backup_file <P: AsRef <Path>> (
 
 }
 
-pub fn read_index <P: AsRef <Path>> (
-	path: P,
+pub fn read_index <PathRef: AsRef <Path>> (
+	path: PathRef,
+	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <Vec <IndexEntry>, String> {
 
 	let mut index_entries: Vec <IndexEntry> =
@@ -185,8 +173,9 @@ pub fn read_index <P: AsRef <Path>> (
 	let mut input =
 		try! (
 			io_result (
-				File::open (
-					path)));
+				open_file_with_crypto (
+					path,
+					key)));
 
 	let mut coded_input_stream =
 		CodedInputStream::new (
@@ -282,17 +271,19 @@ pub fn read_index <P: AsRef <Path>> (
 
 }
 
-pub fn read_bundle <P: AsRef <Path>> (
-	path: P,
+pub fn read_bundle <PathRef: AsRef <Path>> (
+	path: PathRef,
+	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <Vec <([u8; 24], Vec <u8>)>, String> {
 
 	// open file
 
-	let input =
+	let mut input =
 		try! (
 			io_result (
-				File::open (
-					path)));
+				open_file_with_crypto (
+					path,
+					key)));
 
 	let mut buf_input =
 		BufReader::new (
@@ -361,12 +352,15 @@ pub fn read_bundle <P: AsRef <Path>> (
 
 	};
 
-	// skip checksum
+	// skip checksum TODO
+
+	let mut checksum_buffer: [u8; 4] =
+		[0u8; 4];
 
 	try! (
 		io_result (
-			buf_input.seek (
-				SeekFrom::Current (4))));
+			buf_input.read_exact (
+				& mut checksum_buffer)));
 	
 	// decode compressed data
 
@@ -408,6 +402,30 @@ pub fn read_bundle <P: AsRef <Path>> (
 	}
 
 	Ok (chunks)
+
+}
+
+fn open_file_with_crypto <PathRef: AsRef <Path>> (
+	path: PathRef,
+	key: Option <[u8; KEY_SIZE]>,
+) -> io::Result <Box <Read>> {
+
+	Ok (match key {
+
+		Some (key) =>
+			Box::new (
+				try! (
+					CryptoReader::open (
+						path,
+						key))),
+
+		None =>
+			Box::new (
+				try! (
+					File::open (
+						path))),
+
+	})
 
 }
 

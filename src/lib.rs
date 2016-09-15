@@ -10,6 +10,7 @@ mod compress;
 mod server;
 mod zbackup;
 
+pub use zbackup::crypto::CryptoReader;
 pub use zbackup::randaccess::RandomAccess;
 pub use zbackup::repo::Repository;
 

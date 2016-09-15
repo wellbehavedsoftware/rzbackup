@@ -22,6 +22,10 @@ path = "src/bin/server.rs"
 name = "rzbackup-restore"
 path = "src/bin/restore.rs"
 
+[[bin]]
+name = "rzbackup-decrypt"
+path = "src/bin/decrypt.rs"
+
 [dependencies]
 libc = '0.2'
 protobuf = '1.0'

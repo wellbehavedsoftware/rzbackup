@@ -126,7 +126,8 @@ impl Repository {
 						& format! (
 							"{}/index/{}",
 							repository_path,
-							index_name)));
+							index_name),
+						encryption_key));
 
 			for (index_bundle_header, bundle_info) in index {
 
@@ -458,7 +459,15 @@ impl Repository {
 						"{}/bundles/{}/{}",
 						self.path,
 						& index_entry.bundle_id.to_hex () [0 .. 2],
-						index_entry.bundle_id.to_hex ()))
+						index_entry.bundle_id.to_hex ()),
+					self.encryption_key,
+				).map_err (
+					|original_error|
+					format! (
+						"Error reading bundle {}: {}",
+						index_entry.bundle_id.to_hex (),
+						original_error)
+				)
 
 			) {
 
@@ -513,6 +522,12 @@ impl Repository {
 			self,
 			backup_name)
 
+	}
+
+	pub fn encryption_key (
+		& self,
+	) -> Option <[u8; KEY_SIZE]> {
+		self.encryption_key
 	}
 
 }

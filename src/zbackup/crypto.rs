@@ -2,7 +2,6 @@ use crypto;
 use crypto::aessafe::AesSafe128Decryptor;
 use crypto::mac::Mac;
 use crypto::symmetriccipher::BlockDecryptor;
-use crypto::symmetriccipher::Decryptor;
 
 use std::io;
 use std::io::Read;
@@ -21,7 +20,6 @@ pub struct CryptoReader {
 
 	decryptor: AesSafe128Decryptor,
 	initialisation_vector: [u8; IV_SIZE],
-	encryption_key: [u8; KEY_SIZE],
 
 	input_buffer: [u8; PAGE_SIZE],
 	output_buffer: [u8; PAGE_SIZE],
@@ -36,18 +34,14 @@ impl CryptoReader {
 	pub fn open <PathRef: AsRef <Path>> (
 		path: PathRef,
 		encryption_key: [u8; KEY_SIZE],
-	) -> Result <CryptoReader, String> {
+	) -> io::Result <CryptoReader> {
 
 		// open file
 
 		let mut file =
 			try! (
-				io_result (
-					File::open (
-						path)));
-
-		let mut buffer =
-			[0u8; PAGE_SIZE];
+				File::open (
+					path));
 
 		// read first iv
 
@@ -55,9 +49,8 @@ impl CryptoReader {
 			[0u8; IV_SIZE];
 
 		try! (
-			io_result (
-				file.read_exact (
-					& mut initialisation_vector)));
+			file.read_exact (
+				& mut initialisation_vector));
 
 		// setup decryptor
 
@@ -74,7 +67,6 @@ impl CryptoReader {
 
 			decryptor: decryptor,
 			initialisation_vector: initialisation_vector,
-			encryption_key: encryption_key,
 
 			input_buffer: [0u8; PAGE_SIZE],
 			output_buffer: [0u8; PAGE_SIZE],
@@ -94,11 +86,14 @@ impl CryptoReader {
 			! self.eof);
 
 		assert! (
-			self.start_index == self.end_index);
+			self.start_index == self.end_index
+			|| self.start_index == PAGE_SIZE - BLOCK_SIZE);
 
-		if self.start_index == 0 {
+		if self.end_index == 0 {
 
 			// read in some data
+
+			self.start_index = 0;
 
 			self.end_index =
 				try! (
@@ -119,9 +114,7 @@ impl CryptoReader {
 
 				self.input_buffer [index] =
 					self.input_buffer [
-						PAGE_SIZE
-						- BLOCK_SIZE
-						+ index];
+						PAGE_SIZE - BLOCK_SIZE + index];
 
 			}
 
@@ -147,10 +140,14 @@ impl CryptoReader {
 
 		let start_position =
 			if self.end_index == PAGE_SIZE {
-				self.end_index - PAGE_SIZE
+				self.end_index - BLOCK_SIZE
 			} else {
 				self.end_index
 			};
+
+		if start_position == 0 {
+			return Ok (());
+		}
 
 		let mut position =
 			start_position;
@@ -261,10 +258,10 @@ impl Read for CryptoReader {
 						self.start_index + buffer_remaining_len]);
 
 				self.start_index +=
-					buffer_remaining.len ();
+					buffer_remaining_len;
 
 				total_bytes_read +=
-					buffer_remaining.len ();
+					buffer_remaining_len;
 
 				return Ok (total_bytes_read);
 
@@ -275,13 +272,13 @@ impl Read for CryptoReader {
 			buffer_remaining [0 .. available_bytes].copy_from_slice (
 				& self.output_buffer [
 					self.start_index ..
-					self.end_index]);
+					self.start_index + available_bytes]);
 
-			self.start_index =
-				self.end_index;
+			self.start_index +=
+				available_bytes;
 
 			total_bytes_read +=
-				buffer_remaining.len ();
+				available_bytes;
 
 		}
 
