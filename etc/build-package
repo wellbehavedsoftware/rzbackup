@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
+contents=(
+
+	"librzbackup.rlib"
+
+	"rzbackup-client"
+	"rzbackup-decrypt"
+	"rzbackup-restore"
+	"rzbackup-server"
+
+)
+
+version="$1"
+release=$(lsb_release --codename --short)
+package="rzbackup-$version-$release"
+
+cargo build --release
+
+rm -rf "work/$package"
+mkdir -p "work/$package"
+
+for content in "${contents[@]}"; do
+	cp "target/release/$content" "work/$package/$content"
+done
+
+tar \
+	--create \
+	--xz \
+	--directory "work" \
+	--file "work/$package.tar.xz" \
+	"$package"
+
+scp \
+	"work/$package.tar.xz" \
+	"dist:dist/rzbackup/$package.tar.xz"
+
+# ex: noet ts=4 filetype=sh
