@@ -10,6 +10,10 @@ unique features of its own.
 This project is free software and available under the [Apache 2.0 licence]
 (https://www.apache.org/licenses/LICENSE-2.0).
 
+Binaries for ubuntu are available:
+
+https://dist.wellbehavedsoftware.com/rzbackup/
+
 ## List of features
 
 * Rust library for access to ZBackup repositories
