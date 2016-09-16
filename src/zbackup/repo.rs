@@ -520,6 +520,12 @@ impl Repository {
 
 	}
 
+	pub fn storage_info (
+		& self,
+	) -> & proto::StorageInfo {
+		& self.storage_info
+	}
+
 	pub fn encryption_key (
 		& self,
 	) -> Option <[u8; KEY_SIZE]> {

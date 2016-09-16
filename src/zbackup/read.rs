@@ -278,7 +278,7 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 	// open file
 
-	let mut input =
+	let input =
 		try! (
 			io_result (
 				open_file_with_crypto (

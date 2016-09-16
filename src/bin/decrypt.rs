@@ -3,7 +3,6 @@ extern crate rzbackup;
 
 use std::env;
 use std::io;
-use std::io::stdout;
 use std::process;
 
 use rzbackup::CryptoReader;

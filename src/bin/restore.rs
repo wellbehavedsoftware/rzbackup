@@ -51,7 +51,7 @@ fn main () {
 
 	};
 
-	let mut stdout_value =
+	let stdout_value =
 		stdout ();
 
 	let mut stdout_lock =
@@ -61,7 +61,7 @@ fn main () {
 		backup_name,
 		& mut stdout_lock) {
 
-		Ok (repository) => {
+		Ok (_) => {
 
 			process::exit (0);
 
