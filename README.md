@@ -4,10 +4,8 @@ https://github.com/wellbehavedsoftware/wbs-backup
 
 James Pharaoh <james@wellbehavedsoftware.com>
 
-This is a partial Rust clone of ZBackup, along with some unique features of its
-own.
-
-http://zbackup.org/
+This is a partial Rust clone of [ZBackup](http://zbackup.org/), along with some
+unique features of its own.
 
 This project is free software and available under the [Apache 2.0 licence]
 (https://www.apache.org/licenses/LICENSE-2.0).
@@ -93,7 +91,7 @@ rzbackup-restore REPOSITORY PASSWORD-FILE BACKUP > OUTPUT-FILE
 ### Decrypt
 
 This is mostly useful for debugging. It allows you to show the decrypted
-contents of any component file in a ZBackup repository.
+contents of any backup, index or bundle file in a ZBackup repository.
 
 ```sh
 rzbackup-decrypt REPOSITORY PASSWORD-FILE ENCRYPTED-FILE > OUTPUT-FILE
