@@ -1,5 +1,5 @@
 mod server;
-mod client;
+mod handler;
 
 pub use server::server::run_server;
 

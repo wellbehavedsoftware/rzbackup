@@ -16,7 +16,7 @@ fn main () {
 
 	if arguments.len () != 4 {
 
-		println! (
+		stderrln! (
 			"Syntax: {} REPOSITORY-PATH PASSWORD-FILE-PATH ENCRYPTED-FILE-PATH",
 			arguments [0]);
 

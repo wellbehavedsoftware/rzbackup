@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
-pub use server::client::handle_client;
+pub use server::handler::handle_client;
 
 use ::Repository;
 

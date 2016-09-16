@@ -15,16 +15,20 @@ include = [
 ]
 
 [[bin]]
+name = "rzbackup-client"
+path = "src/bin/client.rs"
+
+[[bin]]
+name = "rzbackup-decrypt"
+path = "src/bin/decrypt.rs"
+
+[[bin]]
 name = "rzbackup-server"
 path = "src/bin/server.rs"
 
 [[bin]]
 name = "rzbackup-restore"
 path = "src/bin/restore.rs"
-
-[[bin]]
-name = "rzbackup-decrypt"
-path = "src/bin/decrypt.rs"
 
 [dependencies]
 libc = '0.2'
