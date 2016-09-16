@@ -16,6 +16,7 @@ contents=(
 version="$1"
 release=$(lsb_release --codename --short)
 package="rzbackup-$version-$release"
+target="ubuntu@dist.vpn.wellbehavedsoftware.com/dist/rzbackup"
 
 cargo build --release
 
@@ -35,6 +36,6 @@ tar \
 
 scp \
 	"work/$package.tar.xz" \
-	"dist:dist/rzbackup/$package.tar.xz"
+	"$target/$package.tar.xz"
 
 # ex: noet ts=4 filetype=sh
