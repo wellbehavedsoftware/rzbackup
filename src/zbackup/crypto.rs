@@ -1,7 +1,16 @@
 use crypto;
 use crypto::aessafe::AesSafe128Decryptor;
+use crypto::buffer::BufferResult;
+use crypto::buffer::ReadBuffer;
+use crypto::buffer::RefReadBuffer;
+use crypto::buffer::RefWriteBuffer;
+use crypto::buffer::WriteBuffer;
+use crypto::blockmodes::CbcDecryptor;
+use crypto::blockmodes::DecPadding;
+use crypto::blockmodes::PkcsPadding;
 use crypto::mac::Mac;
 use crypto::symmetriccipher::BlockDecryptor;
+use crypto::symmetriccipher::Decryptor;
 
 use std::io;
 use std::io::Read;
@@ -13,19 +22,27 @@ use zbackup::proto;
 
 use misc::*;
 
+type DecryptorType =
+	CbcDecryptor <
+		AesSafe128Decryptor,
+		DecPadding <PkcsPadding>,
+	>;
+
 pub struct CryptoReader {
 
 	input: File,
 	eof: bool,
 
-	decryptor: AesSafe128Decryptor,
-	initialisation_vector: [u8; IV_SIZE],
+	decryptor: DecryptorType,
 
-	input_buffer: [u8; PAGE_SIZE],
-	output_buffer: [u8; PAGE_SIZE],
+	ciphertext_buffer: [u8; BUFFER_SIZE],
+	plaintext_buffer: [u8; BUFFER_SIZE],
 
-	start_index: usize,
-	end_index: usize,
+	ciphertext_start: usize,
+	ciphertext_end: usize,
+
+	plaintext_start: usize,
+	plaintext_end: usize,
 
 }
 
@@ -45,8 +62,8 @@ impl CryptoReader {
 
 		// read first iv
 
-		let mut initialisation_vector: [u8; IV_SIZE] =
-			[0u8; IV_SIZE];
+		let mut initialisation_vector: Vec <u8> =
+			vec! [0; IV_SIZE];
 
 		try! (
 			file.read_exact (
@@ -55,8 +72,11 @@ impl CryptoReader {
 		// setup decryptor
 
 		let decryptor =
-			AesSafe128Decryptor::new (
-				& encryption_key);
+			CbcDecryptor::new (
+				AesSafe128Decryptor::new (
+					& encryption_key),
+				PkcsPadding,
+				initialisation_vector);
 
 		// return
 
@@ -66,13 +86,14 @@ impl CryptoReader {
 			eof: false,
 
 			decryptor: decryptor,
-			initialisation_vector: initialisation_vector,
 
-			input_buffer: [0u8; PAGE_SIZE],
-			output_buffer: [0u8; PAGE_SIZE],
+			ciphertext_buffer: [0u8; BUFFER_SIZE],
+			ciphertext_start: 0,
+			ciphertext_end: 0,
 
-			start_index: 0,
-			end_index: 0,
+			plaintext_buffer: [0u8; BUFFER_SIZE],
+			plaintext_start: 0,
+			plaintext_end: 0,
 
 		})
 
@@ -86,118 +107,79 @@ impl CryptoReader {
 			! self.eof);
 
 		assert! (
-			self.start_index == self.end_index
-			|| self.start_index == PAGE_SIZE - BLOCK_SIZE);
+			self.plaintext_start == self.plaintext_end);
 
-		if self.end_index == 0 {
+		self.plaintext_start = 0;
+		self.plaintext_end = 0;
 
-			// read in some data
-
-			self.start_index = 0;
-
-			self.end_index =
-				try! (
-					self.input.read (
-						& mut self.input_buffer));
-
-		} else {
-
-			// shift the last block back
-
-			assert! (
-				self.start_index == PAGE_SIZE - BLOCK_SIZE);
-
-			assert! (
-				self.end_index == PAGE_SIZE);
-
-			for index in 0 .. BLOCK_SIZE {
-
-				self.input_buffer [index] =
-					self.input_buffer [
-						PAGE_SIZE - BLOCK_SIZE + index];
-
-			}
+		while ! self.eof {
 
 			// read in some more data
 
-			self.start_index = 0;
+			if self.ciphertext_start == self.ciphertext_end {
 
-			self.end_index =
-				BLOCK_SIZE +
-				try! (
-					self.input.read (
-						& mut self.input_buffer [
-							BLOCK_SIZE ..
-							PAGE_SIZE]));
+				self.ciphertext_start = 0;
 
-		}
+				self.ciphertext_end =
+					try! (
+						self.input.read (
+							& mut self.ciphertext_buffer));
 
-		if self.end_index < PAGE_SIZE {
-			self.eof = true;
-		}
-
-		// decrypt the data in the buffer, except the last block if full
-
-		let start_position =
-			if self.end_index == PAGE_SIZE {
-				self.end_index - BLOCK_SIZE
-			} else {
-				self.end_index
-			};
-
-		if start_position == 0 {
-			return Ok (());
-		}
-
-		let mut position =
-			start_position;
-
-		while position > 0 {
-
-			// decrypt block
-
-			let source_block =
-				& self.input_buffer [
-					position - BLOCK_SIZE ..
-					position];
-
-			let target_block =
-				& mut self.output_buffer [
-					position - BLOCK_SIZE ..
-					position];
-
-			self.decryptor.decrypt_block (
-				source_block,
-				target_block);
-
-			position -= BLOCK_SIZE;
-
-			// combine iv
-
-			let iv_to_use =
-				if position == 0 {
-					& self.initialisation_vector
-				} else {
-					& self.input_buffer [
-						position - BLOCK_SIZE ..
-						position]
-				};
-
-			for index in 0 .. BLOCK_SIZE {
-
-				target_block [index] ^=
-					iv_to_use [index];
+				if self.ciphertext_end == 0 {
+					self.eof = true;
+				}
 
 			}
 
+			// decrypt the data in the buffer
+
+			let mut read_buffer =
+				RefReadBuffer::new (
+					& mut self.ciphertext_buffer [
+						self.ciphertext_start ..
+						self.ciphertext_end]);
+
+			let mut write_buffer =
+				RefWriteBuffer::new (
+					& mut self.plaintext_buffer [
+						self.plaintext_end .. ]);
+
+			let decrypt_result =
+				try! (
+
+				self.decryptor.decrypt (
+					& mut read_buffer,
+					& mut write_buffer,
+					self.eof,
+
+				).map_err (
+					|_|
+
+					io::Error::new (
+						io::ErrorKind::InvalidData,
+						"Decryption failed")
+
+				)
+
+			);
+
+			self.ciphertext_start +=
+				read_buffer.position ();
+
+			self.plaintext_end +=
+				write_buffer.position ();
+
+			match decrypt_result {
+
+				BufferResult::BufferUnderflow =>
+					continue,
+
+				BufferResult::BufferOverflow =>
+					break,
+
+			};
+
 		}
-
-		self.initialisation_vector.copy_from_slice (
-			& self.input_buffer [
-				start_position - BLOCK_SIZE ..
-				start_position]);
-
-		// and return
 
 		Ok (())
 
@@ -217,12 +199,12 @@ impl Read for CryptoReader {
 
 		// loop to fill buffer while decrypting
 
-		while ! self.eof {
+		while ! (self.eof && self.plaintext_start == self.plaintext_end)
+		&& total_bytes_read < buffer.len () {
 
 			// read more data if appropriate
 
-			if self.start_index == 0
-			|| self.start_index == PAGE_SIZE - BLOCK_SIZE {
+			if self.plaintext_start == self.plaintext_end {
 
 				try! (
 					self.read_and_decrypt ());
@@ -235,11 +217,7 @@ impl Read for CryptoReader {
 				& mut buffer [total_bytes_read .. ];
 
 			let available_bytes =
-				if self.end_index == PAGE_SIZE {
-					self.end_index - self.start_index - BLOCK_SIZE
-				} else {
-					self.end_index - self.start_index
-				};
+				self.plaintext_end - self.plaintext_start;
 
 			if available_bytes == 0 {
 				return Ok (total_bytes_read);
@@ -253,32 +231,35 @@ impl Read for CryptoReader {
 					buffer_remaining.len ();
 
 				buffer_remaining.copy_from_slice (
-					& self.output_buffer [
-						self.start_index ..
-						self.start_index + buffer_remaining_len]);
+					& self.plaintext_buffer [
+						self.plaintext_start ..
+						self.plaintext_start + buffer_remaining_len]);
 
-				self.start_index +=
+				self.plaintext_start +=
 					buffer_remaining_len;
 
 				total_bytes_read +=
 					buffer_remaining_len;
 
-				return Ok (total_bytes_read);
+			} else {
+
+				// we have some data but not enough, copy, decrypt and loop
+
+				buffer_remaining [
+					0 .. available_bytes
+				].copy_from_slice (
+					& self.plaintext_buffer [
+						self.plaintext_start ..
+						self.plaintext_start + available_bytes]
+				);
+
+				self.plaintext_start +=
+					available_bytes;
+
+				total_bytes_read +=
+					available_bytes;
 
 			}
-
-			// we have some data but not enough, copy, decrypt and loop
-
-			buffer_remaining [0 .. available_bytes].copy_from_slice (
-				& self.output_buffer [
-					self.start_index ..
-					self.start_index + available_bytes]);
-
-			self.start_index +=
-				available_bytes;
-
-			total_bytes_read +=
-				available_bytes;
 
 		}
 

@@ -1,4 +1,6 @@
 extern crate crypto;
+extern crate futures;
+extern crate futures_cpupool;
 extern crate libc;
 extern crate lru_cache;
 extern crate protobuf;

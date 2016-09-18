@@ -377,15 +377,7 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 	for chunk_record in bundle_info.get_chunk_record () {
 
 		let mut chunk_bytes: Vec <u8> =
-			Vec::with_capacity (
-				chunk_record.get_size () as usize);
-
-		unsafe {
-
-			chunk_bytes.set_len (
-				chunk_record.get_size () as usize);
-
-		}
+			vec! [0u8; chunk_record.get_size () as usize];
 
 		try! (
 			io_result (

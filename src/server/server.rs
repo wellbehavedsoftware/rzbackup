@@ -1,7 +1,5 @@
 use std::error::Error;
 use std::net::TcpListener;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::thread;
 
 pub use server::handler::handle_client;
@@ -21,11 +19,6 @@ pub fn run_server (
 				TcpListener::bind (
 					bind_address)));
 
-	let repository =
-		Arc::new (
-			Mutex::new (
-				repository));
-	
 	for stream
 	in listener.incoming () {
 
@@ -40,7 +33,7 @@ pub fn run_server (
 					move || {
 
 						handle_client (
-							repository_copy,
+							& repository_copy,
 							stream)
 
 					}

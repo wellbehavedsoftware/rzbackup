@@ -35,7 +35,7 @@ struct InstructionRef {
 
 pub struct RandomAccess <'a> {
 
-	repo: & 'a mut Repository,
+	repo: & 'a Repository,
 	instruction_refs: Vec <InstructionRef>,
 	size: u64,
 
@@ -48,7 +48,7 @@ pub struct RandomAccess <'a> {
 impl <'a> RandomAccess <'a> {
 
 	pub fn new (
-		repo: & 'a mut Repository,
+		repo: & 'a Repository,
 		backup_name: & str,
 	) -> Result <RandomAccess <'a>, String> {
 
@@ -100,7 +100,7 @@ impl <'a> RandomAccess <'a> {
 				let index_entry =
 					try! (
 						repo.get_index_entry (
-							& chunk_id));
+							chunk_id));
 
 				instruction_refs.push (
 					InstructionRef {
@@ -263,11 +263,13 @@ impl <'a> Read for RandomAccess <'a> {
 								* chunk_id,
 							).map_err (
 								|_error|
+
 								io::Error::new (
 									io::ErrorKind::InvalidData,
 									format! (
 										"Chunk not found: {}",
 										chunk_id.to_hex ()))
+
 							));
 
 					self.chunk_position =

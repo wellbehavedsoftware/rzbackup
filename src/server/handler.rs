@@ -3,15 +3,13 @@ use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Write;
 use std::net::TcpStream;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 use ::Repository;
 
 use ::misc::*;
 
 pub fn handle_client (
-	repository: Arc <Mutex <Repository>>,
+	repository: & Repository,
 	stream: TcpStream,
 ) {
 
@@ -48,7 +46,7 @@ pub fn handle_client (
 }
 
 fn handle_client_real (
-	repository: Arc <Mutex <Repository>>,
+	repository: & Repository,
 	stream: TcpStream,
 ) -> Result <(), String> {
 
@@ -94,7 +92,7 @@ fn handle_client_real (
 
 			try! (
 				handle_restore (
-					& repository,
+					repository,
 					& stream,
 					rest));
 
@@ -117,7 +115,7 @@ fn handle_client_real (
 }
 
 fn handle_restore (
-	repository_mutex: & Arc <Mutex <Repository>>,
+	repository: & Repository,
 	stream: & TcpStream,
 	path: & str,
 ) -> Result <(), String> {
@@ -125,9 +123,6 @@ fn handle_restore (
 	println! (
 		"Will restore: {}",
 		path);
-
-	let mut repository =
-		repository_mutex.lock ().unwrap ();
 
 	let mut writer =
 		BufWriter::new (

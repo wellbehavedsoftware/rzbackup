@@ -31,8 +31,11 @@ name = "rzbackup-restore"
 path = "src/bin/restore.rs"
 
 [dependencies]
-libc = '0.2'
-lru-cache = '0.0'
-protobuf = '1.0'
-rust-crypto = '0.2'
-rustc-serialize = '0.3'
+futures = "0.1"
+futures-cpupool = "*"
+libc = "0.2"
+lru-cache = "0.0"
+protobuf = "1.0"
+rust-crypto = "0.2"
+rustc-serialize = "0.3"
+threadpool = "1.0"

@@ -39,6 +39,7 @@ fn main () {
 
 	let repository =
 		match Repository::open (
+			Repository::default_config (),
 			repository_path,
 			password_file_path) {
 

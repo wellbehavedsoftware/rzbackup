@@ -5,8 +5,7 @@ use std::io;
 use std::io::Read;
 use std::ptr;
 
-const READ_BUFFER_SIZE: usize =
-	0x100000;
+const READ_BUFFER_SIZE: usize = 0x10000;
 
 #[ repr (C) ]
 struct LzmaStream {
@@ -79,7 +78,7 @@ extern {
 
 pub struct LzmaReader <'a> {
 	input: & 'a mut Read,
-	input_buffer: Vec <u8>,
+	input_buffer: [u8; READ_BUFFER_SIZE],
 	lzma_stream: LzmaStream,
 	error: bool,
 }
@@ -136,20 +135,9 @@ impl <'a> LzmaReader <'a> {
 
 		}
 
-		let mut input_buffer: Vec <u8> =
-			Vec::with_capacity (
-				READ_BUFFER_SIZE);
-
-		unsafe {
-
-			input_buffer.set_len (
-				READ_BUFFER_SIZE);
-
-		}
-
 		Ok (LzmaReader {
 			input: input,
-			input_buffer: input_buffer,
+			input_buffer: [0u8; READ_BUFFER_SIZE],
 			lzma_stream: lzma_stream,
 			error: false,
 		})

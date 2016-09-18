@@ -15,7 +15,7 @@ fn main () {
 	if arguments.len () != 4 {
 
 		println! (
-			"Syntax: {} REPOSITORY-PATH PASSWORD-FILE-PATH BACKUP",
+			"Syntax: {} REPOSITORY PASSWORD-FILE BACKUP",
 			arguments [0]);
 
 		process::exit (1);
@@ -31,8 +31,9 @@ fn main () {
 	let backup_name =
 		& arguments [3];
 
-	let mut repository =
+	let repository =
 		match Repository::open (
+			Repository::default_config (),
 			repository_path,
 			Some (password_file_path)) {
 
