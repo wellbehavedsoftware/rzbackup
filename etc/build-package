@@ -16,7 +16,7 @@ contents=(
 version="$1"
 release=$(lsb_release --codename --short)
 package="rzbackup-$version-$release"
-target="ubuntu@dist.vpn.wellbehavedsoftware.com/dist/rzbackup"
+target="ubuntu@dist.vpn.wellbehavedsoftware.com:dist/rzbackup"
 
 cargo build --release
 
