@@ -29,7 +29,12 @@ fn main () {
 	let command_arguments =
 		arguments [2 .. ].to_owned ();
 
-	if command_name == "restore" {
+	if command_name == "reindex" {
+
+		reindex_command (
+			& command_arguments);
+
+	} else if command_name == "restore" {
 
 		restore_command (
 			& command_arguments);
@@ -45,6 +50,42 @@ fn main () {
 
 }
 
+fn reindex_command (
+	arguments: & [String],
+) {
+
+	if arguments.len () != 1 {
+
+		exit_with_error_and_show_help (
+			"Invalid syntax");
+
+	}
+
+	let (server_hostname, server_port) =
+		parse_server_address (
+			& arguments [0]);
+
+	match do_reindex (
+		server_hostname,
+		server_port,
+	) {
+
+		Ok (_) =>
+			(),
+
+		Err (error) => {
+
+			exit_with_error (
+				& format! (
+					"Error performing reindex: {}",
+					error));
+
+		},
+
+	};
+
+}
+
 fn restore_command (
 	arguments: & [String],
 ) {
@@ -56,41 +97,12 @@ fn restore_command (
 
 	}
 
-	let server_address_string =
-		& arguments [0];
+	let (server_hostname, server_port) =
+		parse_server_address (
+			& arguments [0]);
 
 	let backup_filename =
 		& arguments [1];
-
-	let server_address_parts: Vec <& str> =
-		server_address_string.split (":").collect ();
-
-	if server_address_parts.len () != 2 {
-
-		exit_with_error_and_show_help (
-			"Invalid server address");
-
-	}
-
-	let server_hostname =
-		server_address_parts [0];
-
-	let server_port =
-		match server_address_parts [1].parse::<u16> () {
-
-		Ok (port) =>
-			port,
-
-		Err (error) => {
-
-			exit_with_error_and_show_help (
-				& format! (
-					"Invalid server address: {}",
-					error.description ()));
-
-		},
-
-	};
 
 	match do_restore (
 		server_hostname,
@@ -111,6 +123,77 @@ fn restore_command (
 		},
 
 	};
+
+}
+
+fn do_reindex (
+	server_hostname: & str,
+	server_port: u16,
+) -> Result <(), String> {
+
+	let mut stream =
+		try! (
+
+		TcpStream::connect (
+			(server_hostname, server_port),
+		).map_err (
+			|error|
+
+			format! (
+				"Connection error: {}",
+				error.description ())
+
+		)
+
+	);
+
+	try! (
+
+		stream.write_fmt (
+			format_args! (
+				"reindex\n"),
+		).map_err (
+			|error|
+
+			format! (
+				"Communication error: {}",
+				error.description ())
+
+		)
+
+	);
+
+	let mut reader =
+		BufReader::new (
+			stream);
+
+	let mut response_line =
+		String::new ();
+
+	try! (
+		reader.read_line (
+			& mut response_line,
+		).map_err (
+			|error|
+
+			format! (
+				"Communication error: {}",
+				error.description ())
+
+		)
+
+	);
+
+	if response_line != "OK\n" {
+
+		return Err (
+			format! (
+				"Server returned error: {}\n",
+				response_line.trim ()));
+
+	}
+
+	Ok (())
 
 }
 
@@ -203,6 +286,44 @@ fn do_restore (
 
 }
 
+fn parse_server_address <'a> (
+	server_address_string: & 'a str,
+) -> (& 'a str, u16) {
+
+	let server_address_parts: Vec <& str> =
+		server_address_string.split (":").collect ();
+
+	if server_address_parts.len () != 2 {
+
+		exit_with_error_and_show_help (
+			"Invalid server address");
+
+	}
+
+	let server_hostname =
+		server_address_parts [0];
+
+	let server_port =
+		match server_address_parts [1].parse::<u16> () {
+
+		Ok (port) =>
+			port,
+
+		Err (error) => {
+
+			exit_with_error_and_show_help (
+				& format! (
+					"Invalid server address: {}",
+					error.description ()));
+
+		},
+
+	};
+
+	(server_hostname, server_port)
+
+}
+
 fn exit_with_error (
 	error_message: & str,
 ) -> ! {
@@ -242,6 +363,10 @@ fn show_help () {
 
 	stderrln! (
 		"");
+
+	stderrln! (
+		"  {} reindex SERVER:PORT",
+		env::args ().next ().unwrap ());
 
 	stderrln! (
 		"  {} restore SERVER:PORT PATH",

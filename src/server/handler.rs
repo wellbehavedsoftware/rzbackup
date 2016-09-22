@@ -64,11 +64,20 @@ fn handle_client_real (
 				reader.read_line (
 					& mut line)));
 
+		if line.is_empty () {
+
+			println! (
+				"Disconnect");
+
+			return Ok (());
+
+		}
+
 		let parts: Vec <& str> =
 			line.splitn (2, ' ').collect ();
 
 		let command_string =
-			parts [0].to_lowercase ();
+			parts [0].trim ().to_lowercase ();
 
 		let command =
 			& command_string;
@@ -80,15 +89,21 @@ fn handle_client_real (
 				""
 			};
 
-		println! (
-			"Command: [{}]",
-			command);
+		if command == "exit" {
 
-		println! (
-			"Rest: [{}]",
-			rest);
+			println! (
+				"Exiting");
 
-		if command == "restore" {
+			return Ok (());
+
+		} else if command == "reindex" {
+
+			try! (
+				handle_reindex (
+					repository,
+					& stream));
+
+		} else if command == "restore" {
 
 			try! (
 				handle_restore (
@@ -98,19 +113,52 @@ fn handle_client_real (
 
 			return Ok (());
 
-		} else if command == "exit" {
-
-			return Ok (());
-
 		} else {
 
-			println! (
-				"Don't recognise command: {}",
-				command);
+			try! (
+				handle_command_not_recognised (
+					& stream,
+					command));
 
 		}
 
 	}
+
+}
+
+fn handle_reindex (
+	repository: & Repository,
+	stream: & TcpStream,
+) -> Result <(), String> {
+
+	println! (
+		"Will reindex");
+
+	let mut writer =
+		BufWriter::new (
+			stream);
+
+	try! (
+
+		repository.load_indexes (
+		).map_err (
+			|error|
+
+			format! (
+				"Error during reindex: {}",
+				error)
+
+		)
+
+	);
+
+	try! (
+		io_result (
+			writer.write_fmt (
+				format_args! (
+					"OK\n"))));
+
+	Ok (())
 
 }
 
@@ -138,6 +186,30 @@ fn handle_restore (
 		repository.restore (
 			path,
 			& mut writer));
+
+	Ok (())
+
+}
+
+fn handle_command_not_recognised (
+	stream: & TcpStream,
+	command_name: & str,
+) -> Result <(), String> {
+
+	println! (
+		"Command not recognised: {}",
+		command_name);
+
+	let mut writer =
+		BufWriter::new (
+			stream);
+
+	try! (
+		io_result (
+			writer.write_fmt (
+				format_args! (
+					"ERROR Command not recognised: {}\n",
+					command_name))));
 
 	Ok (())
 

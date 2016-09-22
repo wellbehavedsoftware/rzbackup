@@ -19,7 +19,8 @@ Binaries for ubuntu are available can be downloaded [here]
 * Supports encrypted and non encrypted formats
 * RandomAccess implements Read and Seek to provide efficient random access
 * Client/server utilities to efficiently restore multiple backups, sharing
-chunk cache
+  chunk cache
+* Multi-threaded restore
 * Command line decrypt utility, mostly useful for debugging
 
 ## Library usage
@@ -75,9 +76,12 @@ rzbackup-server LISTEN-ADDRESS:PORT REPOSITORY [PASSWORD-FILE]
 
 ### Client
 
-The client connects to the server and streams a backup to standard output.
+The client connects to the server and streams a backup to standard output. It
+can also tell the server to reload its indexes, which will be necessary if new
+backups have been made.
 
 ```sh
+rzbackup-client reindex SERVER-ADDRESS:PORT
 rzbackup-client restore SERVER-ADDRESS:PORT BACKUP-NAME > OUTPUT-FILE
 ```
 
@@ -87,8 +91,8 @@ The restore command is able to perform a one-off restore. It is basically
 equivalent to ZBackup's own `restore` command.
 
 ```sh
-rzbackup-restore REPOSITORY '' BACKUP > OUTPUT-FILE
 rzbackup-restore REPOSITORY PASSWORD-FILE BACKUP > OUTPUT-FILE
+rzbackup-restore REPOSITORY '' BACKUP > OUTPUT-FILE
 ```
 
 ### Decrypt

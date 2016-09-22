@@ -19,6 +19,7 @@ use std::fs;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -193,14 +194,34 @@ impl Repository {
 		& self,
 	) -> Result <(), String> {
 
-stderrln! ("load_indexes lock attempt");
 		let mut self_state =
 			self.state.lock ().unwrap ();
-stderrln! ("load_indexes lock success");
 
 		if self_state.master_index.is_some () {
 			return Ok (());
 		}
+
+		self.load_indexes_real (
+			self_state.deref_mut ())
+
+	}
+
+	pub fn reload_indexes (
+		& self,
+	) -> Result <(), String> {
+
+		let mut self_state =
+			self.state.lock ().unwrap ();
+
+		self.load_indexes_real (
+			self_state.deref_mut ())
+
+	}
+
+	fn load_indexes_real (
+		& self,
+		self_state: & mut RepositoryState,
+	) -> Result <(), String> {
 
 		struct IndexEntryData {
 			chunk_id: ChunkId,
