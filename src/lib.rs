@@ -15,8 +15,11 @@ mod server;
 mod zbackup;
 
 pub use zbackup::crypto::CryptoReader;
+pub use zbackup::data::*;
+pub use zbackup::metadata::*;
 pub use zbackup::randaccess::RandomAccess;
 pub use zbackup::repo::Repository;
+pub use zbackup::repo::RepositoryConfig;
 
 pub use server::run_server;
 

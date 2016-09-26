@@ -1,5 +1,7 @@
 #![ allow (unused_parens) ]
 
+extern crate num_cpus;
+
 use futures;
 use futures::BoxFuture;
 use futures::Complete;
@@ -36,7 +38,7 @@ type MasterIndex = HashMap <BundleId, MasterIndexEntry>;
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
 type ChunkCache = LruCache <ChunkId, ChunkData>;
 
-#[ derive (Clone, Copy) ]
+#[ derive (Clone) ]
 pub struct MasterIndexEntryData {
 	pub bundle_id: BundleId,
 	pub size: u64,
@@ -44,21 +46,14 @@ pub struct MasterIndexEntryData {
 
 pub type MasterIndexEntry = Arc <MasterIndexEntryData>;
 
-#[ derive (Clone, Copy) ]
+#[ derive (Clone) ]
 pub struct RepositoryConfig {
-	max_uncompressed_memory_cache_entries: usize,
-	max_compressed_memory_cache_entries: usize,
-	max_compressed_filesystem_cache_entries: usize,
-	max_threads: usize,
+	pub max_uncompressed_memory_cache_entries: usize,
+	pub max_compressed_memory_cache_entries: usize,
+	pub max_compressed_filesystem_cache_entries: usize,
+	pub max_threads: usize,
+	pub filesystem_cache_path: String,
 }
-
-const DEFAULT_CONFIG: RepositoryConfig =
-	RepositoryConfig {
-		max_uncompressed_memory_cache_entries: 0x800,
-		max_compressed_memory_cache_entries: 0x4000,
-		max_compressed_filesystem_cache_entries: 0x20000,
-		max_threads: 4,
-	};
 
 struct RepositoryData {
 	config: RepositoryConfig,
@@ -85,7 +80,26 @@ pub struct Repository {
 impl Repository {
 
 	pub fn default_config () -> RepositoryConfig {
-		DEFAULT_CONFIG
+
+		RepositoryConfig {
+
+			max_uncompressed_memory_cache_entries:
+				MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES,
+
+			max_compressed_memory_cache_entries:
+				MAX_COMPRESSED_MEMORY_CACHE_ENTRIES,
+
+			max_compressed_filesystem_cache_entries:
+				MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES,
+
+			max_threads:
+				num_cpus::get (),
+
+			filesystem_cache_path:
+				FILESYSTEM_CACHE_PATH.to_owned (),
+
+		}
+
 	}
 
 	pub fn open (

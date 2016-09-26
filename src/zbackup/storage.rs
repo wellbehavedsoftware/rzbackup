@@ -97,7 +97,7 @@ impl StorageManager {
 			return Err (
 				format! (
 					"Not a directory: {}",
-					path));
+					& path));
 
 		}
 

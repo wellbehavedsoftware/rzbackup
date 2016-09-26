@@ -24,4 +24,9 @@ pub type IndexEntry = (
 	proto::BundleInfo,
 );
 
+pub const MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x800;
+pub const MAX_COMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x4000;
+pub const MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES: usize = 0x20000;
+pub const FILESYSTEM_CACHE_PATH: & 'static str = "/tmp/rzbackup-cache";
+
 // ex: noet ts=4 filetype=rust
