@@ -9,6 +9,10 @@ repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-b
 readme = "README.md"
 build = "src/build.rs"
 
+exclude = [
+	"src/zbackup/metadata.rs",
+]
+
 include = [
 	"etc/**/*",
 	"src/**/*",
