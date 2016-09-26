@@ -3,6 +3,7 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate libc;
 extern crate lru_cache;
+extern crate minilzo;
 extern crate protobuf;
 extern crate rustc_serialize;
 

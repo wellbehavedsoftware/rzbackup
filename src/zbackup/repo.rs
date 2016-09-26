@@ -30,6 +30,7 @@ use zbackup::data::*;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
+use zbackup::storage::*;
 
 type MasterIndex = HashMap <BundleId, MasterIndexEntry>;
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
@@ -45,13 +46,17 @@ pub type MasterIndexEntry = Arc <MasterIndexEntryData>;
 
 #[ derive (Clone, Copy) ]
 pub struct RepositoryConfig {
-	max_cache_entries: usize,
+	max_uncompressed_memory_cache_entries: usize,
+	max_compressed_memory_cache_entries: usize,
+	max_compressed_filesystem_cache_entries: usize,
 	max_threads: usize,
 }
 
 const DEFAULT_CONFIG: RepositoryConfig =
 	RepositoryConfig {
-		max_cache_entries: 0x10000,
+		max_uncompressed_memory_cache_entries: 0x800,
+		max_compressed_memory_cache_entries: 0x4000,
+		max_compressed_filesystem_cache_entries: 0x20000,
 		max_threads: 4,
 	};
 
@@ -66,7 +71,6 @@ type BundleWaiter = Complete <Result <ChunkMap, String>>;
 
 struct RepositoryState {
 	master_index: Option <MasterIndex>,
-	chunk_cache: ChunkCache,
 	bundle_waiters: HashMap <BundleId, Vec <BundleWaiter>>,
 }
 
@@ -75,6 +79,7 @@ pub struct Repository {
 	data: Arc <RepositoryData>,
 	state: Arc <Mutex <RepositoryState>>,
 	cpu_pool: CpuPool,
+	storage_manager: StorageManager,
 }
 
 impl Repository {
@@ -147,6 +152,21 @@ impl Repository {
 			CpuPool::new (
 				repository_config.max_threads);
 
+		// create storage manager
+
+		let storage_manager =
+			try! (
+
+			StorageManager::new (
+				"/tmp/storage",
+				cpu_pool.clone (),
+				repository_config.max_uncompressed_memory_cache_entries,
+				repository_config.max_compressed_memory_cache_entries,
+				repository_config.max_compressed_filesystem_cache_entries,
+			)
+
+		);
+
 		// return
 
 		let repository_data =
@@ -166,10 +186,6 @@ impl Repository {
 			master_index:
 				None,
 
-			chunk_cache:
-				ChunkCache::new (
-					repository_config.max_cache_entries),
-
 			bundle_waiters:
 				HashMap::new (),
 
@@ -184,7 +200,11 @@ impl Repository {
 				Mutex::new (
 					repository_state)),
 
-			cpu_pool: cpu_pool,
+			cpu_pool:
+				cpu_pool,
+
+			storage_manager:
+				storage_manager,
 
 		})
 
@@ -745,94 +765,101 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> BoxFuture <ChunkData, String> {
 
-		let bundle_id;
+		let mut self_state =
+			self.state.lock ().unwrap ();
 
-		{
+		// load indexes if they aren't already
 
-			let mut self_state =
-				self.state.lock ().unwrap ();
+		if self_state.master_index.is_none () {
 
-			if self_state.master_index.is_none () {
+			match self.load_indexes () {
 
-				match self.load_indexes () {
+				Ok (_) => (),
 
-					Ok (_) => (),
-
-					Err (error) =>
-						return futures::failed (
-							error,
-						).boxed (),
-
-				}
-
-			}
-
-			// lookup in cache
-
-			match (
-
-				self_state.chunk_cache.get_mut (
-					& chunk_id)
-
-			) {
-
-				Some (chunk_data) => {
-
-					return futures::done (
-						Ok (
-							chunk_data.clone ()
-						)
-					).boxed ();
-
-				},
-
-				None => (),
-
-			}
-
-			// get bundle id
-
-			bundle_id = match (
-
-				self_state.master_index.as_ref ().unwrap ().get (
-					& chunk_id,
-				).clone ()
-
-			) {
-
-				Some (index_entry) =>
-					index_entry.bundle_id,
-
-				None => {
-
+				Err (error) =>
 					return futures::failed (
-						format! (
-							"Missing chunk: {}",
-							chunk_id.to_hex ()),
-					).boxed ();
+						error,
+					).boxed (),
 
-				},
-
-			};
+			}
 
 		}
+
+		// lookup via storage manager
+
+		match (
+
+			self.storage_manager.get (
+				& chunk_id.to_hex ())
+
+		) {
+
+			Some (chunk_data_future) =>
+				return chunk_data_future,
+
+			None => (),
+
+		};
+
+		// load bundle if chunk is not available
+
+		self.get_chunk_from_bundle (
+			self_state.deref_mut (),
+			& chunk_id)
+
+	}
+
+	fn get_chunk_from_bundle (
+		& self,
+		self_state: & mut RepositoryState,
+		chunk_id: & ChunkId,
+	) -> BoxFuture <ChunkData, String> {
+
+		// get bundle id
+
+		let bundle_id = match (
+
+			self_state.master_index.as_ref ().unwrap ().get (
+				chunk_id,
+			).clone ()
+
+		) {
+
+			Some (index_entry) =>
+				index_entry.bundle_id,
+
+			None => {
+
+				return futures::failed (
+					format! (
+						"Missing chunk: {}",
+						chunk_id.to_hex ()),
+				).boxed ();
+
+			},
+
+		};
 
 		// load bundle
 
 		let get_bundle_future =
-			self.get_bundle (
+			self.get_bundle_async (
+				self_state,
 				bundle_id);
+
+		let chunk_id_copy =
+			chunk_id.clone ();
 
 		get_bundle_future.and_then (
 			move |chunk_map|
 
 			chunk_map.get (
-				& chunk_id,
+				& chunk_id_copy,
 			).ok_or (
 
 				format! (
 					"Expected to find chunk {} in bundle {}",
-					chunk_id.to_hex (),
+					chunk_id_copy.to_hex (),
 					bundle_id.to_hex ())
 
 			).map (
@@ -846,8 +873,9 @@ impl Repository {
 
 	}
 
-	fn get_bundle (
+	fn get_bundle_async (
 		& self,
+		self_state: & mut RepositoryState,
 		bundle_id: BundleId,
 	) -> BoxFuture <ChunkMap, String> {
 
@@ -857,10 +885,6 @@ impl Repository {
 				self.data.path,
 				& bundle_id.to_hex () [0 .. 2],
 				bundle_id.to_hex ());
-
-		let mut self_state =
-			self.state.lock ().unwrap ();
-
 
 		if (
 
@@ -892,15 +916,12 @@ impl Repository {
 
 		} else {
 
-			let self_clone_1 =
-				self.clone ();
-
-			let self_clone_2 =
-				self.clone ();
-
 			self_state.bundle_waiters.insert (
 				bundle_id,
 				Vec::new ());
+
+			let mut self_clone =
+				self.clone ();
 
 			self.cpu_pool.spawn_fn (
 				move || {
@@ -909,7 +930,7 @@ impl Repository {
 
 					read_bundle (
 						bundle_path,
-						self_clone_1.data.encryption_key)
+						self_clone.data.encryption_key)
 
 				).map_err (
 					|original_error| {
@@ -938,19 +959,24 @@ impl Repository {
 
 				});
 
+				// store chunk data in cache
+
 				let mut self_state =
-					self_clone_2.state.lock ().unwrap ();
+					self_clone.state.lock ().unwrap ();
 
 				for (chunk_id, chunk_data)
 				in chunk_map_result.as_ref ().unwrap_or (
 					& Arc::new (HashMap::new ()),
 				).iter () {
 
-					self_state.chunk_cache.insert (
-						chunk_id.clone (),
-						chunk_data.clone ());
+					try! (
+						self_clone.storage_manager.insert (
+							chunk_id.to_hex (),
+							chunk_data.clone ()));
 
 				}
+
+				// notify other processes waiting for the same bundle
 
 				let bundle_waiters =
 					self_state.bundle_waiters.remove (
@@ -963,6 +989,8 @@ impl Repository {
 						chunk_map_result.clone ());
 
 				}
+
+				// return
 
 				chunk_map_result
 
