@@ -9,6 +9,12 @@ repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-b
 readme = "README.md"
 build = "src/build.rs"
 
+exclude = [
+	"src/zbackup/metadata.rs",
+	"target/**/*",
+	"work/**/*",
+]
+
 [[bin]]
 name = "rzbackup-client"
 path = "src/bin/client.rs"
