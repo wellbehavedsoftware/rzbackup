@@ -272,6 +272,11 @@ impl Read for CryptoReader {
 
 }
 
+/// This implements the decryption and verification of a ZBackup encryption key,
+/// from the `EncryptionKeyInfo` and the password file. This will normally be
+/// called automatically when constructing a `Repository`, but it is made public
+/// because it may be useful in some cases.
+
 pub fn decrypt_key (
 	password_file_path: & str,
 	encryption_key: & proto::EncryptionKeyInfo,
