@@ -140,7 +140,7 @@ fn handle_reindex (
 
 	try! (
 
-		repository.load_indexes (
+		repository.reload_indexes (
 		).map_err (
 			|error|
 
