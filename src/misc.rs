@@ -25,7 +25,8 @@ pub fn io_result <Type> (
 
 }
 
-#[macro_export]
+#[ doc (hidden) ]
+#[ macro_export ]
 macro_rules! stderr {
 
 	( $ ( $arg : tt ) * ) => (
@@ -47,7 +48,8 @@ macro_rules! stderr {
 
 }
 
-#[macro_export]
+#[ doc (hidden) ]
+#[ macro_export ]
 macro_rules! stderrln {
 
 	( $ ( $arg : tt ) * ) => (

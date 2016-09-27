@@ -46,6 +46,9 @@ pub struct MasterIndexEntryData {
 
 pub type MasterIndexEntry = Arc <MasterIndexEntryData>;
 
+/// This controls the configuration of a repository, and is passed to the `open`
+/// constructor.
+
 #[ derive (Clone) ]
 pub struct RepositoryConfig {
 	pub max_uncompressed_memory_cache_entries: usize,
@@ -69,6 +72,10 @@ struct RepositoryState {
 	bundle_waiters: HashMap <BundleId, Vec <BundleWaiter>>,
 }
 
+/// This is the main struct which implements the ZBackup restore functionality.
+/// It is multi-threaded, using a cpu pool internally, and it is fully thread
+/// safe.
+
 #[ derive (Clone) ]
 pub struct Repository {
 	data: Arc <RepositoryData>,
@@ -78,6 +85,10 @@ pub struct Repository {
 }
 
 impl Repository {
+
+	/// Provides a default configuration for a Repository. This may be useful
+	/// for some users of the library, although normally a custom configuration
+	/// will be a better option.
 
 	pub fn default_config () -> RepositoryConfig {
 
@@ -101,6 +112,12 @@ impl Repository {
 		}
 
 	}
+
+	/// Constructs a new Repository from a configuration and a path, and an
+	/// optional password file path.
+	///
+	/// This will read the repositories info file, and decrypt the encryption
+	/// key using the password, if provided.
 
 	pub fn open (
 		repository_config: RepositoryConfig,
@@ -224,6 +241,16 @@ impl Repository {
 
 	}
 
+	/// Load the index files. This is not done automatically, but it will be
+	/// done lazily when they are first needed. This function also implements a
+	/// lazy loading pattern, and so no index files will be reloaded if it is
+	/// called more than ones.
+	///
+	/// Apart from being used internally, this function is designed to be used
+	/// by library users who want to eagerly load the indexes so that restore
+	/// operations can begin more quickly. This would also allow errors when
+	/// reading the index files to be caught more quickly and deterministically.
+
 	pub fn load_indexes (
 		& self,
 	) -> Result <(), String> {
@@ -239,6 +266,10 @@ impl Repository {
 			self_state.deref_mut ())
 
 	}
+
+	/// Reload the index files. This forces the indexes to be reloaded, even if
+	/// they have already been loaded. This should be called if new backups have
+	/// been added to an already-open repository.
 
 	pub fn reload_indexes (
 		& self,
@@ -405,6 +436,10 @@ impl Repository {
 
 	}
 
+	/// This will load a backup entirely into memory. The use of this function
+	/// should probably be discouraged for most use cases, since backups could
+	/// be extremely large.
+
 	pub fn read_and_expand_backup (
 		& self,
 		backup_name: & str,
@@ -470,6 +505,9 @@ impl Repository {
 
 	}
 
+	/// This function will restore a named backup, writing it to the provided
+	/// implementation of the `Write` trait.
+
 	pub fn restore (
 		& self,
 		backup_name: & str,
@@ -507,6 +545,7 @@ impl Repository {
 
 	}
 
+	#[ doc (hidden) ]
 	pub fn restore_test (
 		& self,
 		backup_name: & str,
@@ -599,6 +638,7 @@ impl Repository {
 
 	}
 
+	#[ doc (hidden) ]
 	pub fn follow_instructions (
 		& self,
 		input: & mut Read,
@@ -763,6 +803,10 @@ impl Repository {
 
 	}
 
+	/// This will load a single chunk from the repository. It can be used to
+	/// create advanced behaviours, and is used, for example, by the
+	/// `RandomAccess` struct.
+
 	pub fn get_chunk (
 		& self,
 		chunk_id: ChunkId,
@@ -773,6 +817,10 @@ impl Repository {
 		).wait ()
 
 	}
+
+	/// This will load a single chunk from the repository, returning immediately
+	/// with a future which can later be waited for. The chunk will be loaded in
+	/// the background using the cpu pool.
 
 	pub fn get_chunk_async (
 		& self,
@@ -1014,6 +1062,14 @@ impl Repository {
 
 	}
 
+	/// This will load a single index entry from the repository. It returns this
+	/// as a `MasterIndexEntry`, which includes the index entry and the header
+	/// from the index file, since both are generally needed to do anything
+	/// useful.
+	///
+	/// It can be used to create advanced behaviours, and is used, for example,
+	/// by the `RandomAccess` struct.
+
 	pub fn get_index_entry (
 		& self,
 		chunk_id: ChunkId,
@@ -1051,6 +1107,9 @@ impl Repository {
 
 	}
 
+	/// This is a convenience method to construct a `RandomAccess` struct. It
+	/// simply calls the `RandomAccess::new` constructor.
+
 	pub fn open_backup (
 		& self,
 		backup_name: & str,
@@ -1062,17 +1121,27 @@ impl Repository {
 
 	}
 
+	/// This is an accessor method to access the `RepositoryConfig` struct which
+	/// was used to construct this `Repository`.
+
 	pub fn config (
 		& self,
 	) -> & RepositoryConfig {
 		& self.data.config
 	}
 
+	/// This is an accessor method to access the `StorageInfo` protobug struct
+	/// which was loaded from the repository's index file.
+
 	pub fn storage_info (
 		& self,
 	) -> & proto::StorageInfo {
 		& self.data.storage_info
 	}
+
+	/// This is an accessor method to access the decrypted encryption key which
+	/// was stored in the repository's info file and decrypted using the
+	/// provided password.
 
 	pub fn encryption_key (
 		& self,

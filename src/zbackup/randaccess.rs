@@ -33,6 +33,9 @@ struct InstructionRef {
 
 }
 
+/// This struct implements both `Seek` and `Read` and can be used to easily and
+/// efficiently access the contents of a backup using these idiomatic APIs.
+
 pub struct RandomAccess <'a> {
 
 	repo: & 'a Repository,

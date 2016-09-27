@@ -28,6 +28,9 @@ type DecryptorType =
 		DecPadding <PkcsPadding>,
 	>;
 
+/// This provides a reader for an encrypted ZBackup file. It is used internally,
+/// but also made available publicly, since it may be useful in some cases.
+
 pub struct CryptoReader {
 
 	input: File,
