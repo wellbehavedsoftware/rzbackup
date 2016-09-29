@@ -49,6 +49,15 @@ fn build_default_argument_string_values (
 
 fn main () {
 
+	process::exit (
+		main_real (),
+	);
+
+}
+
+fn main_real (
+) -> i32 {
+
 	let default_argument_string_values =
 		build_default_argument_string_values ();
 
@@ -96,7 +105,7 @@ fn main () {
 				"Error opening repository: {}",
 				error);
 
-			process::exit (1);
+			return 1;
 
 		},
 
@@ -118,14 +127,16 @@ fn main () {
 				"RZBackup server encountered error: {}",
 				error);
 
-			process::exit (1);
+			return 1;
 
 		},
 
 	};
 
 	println! (
-		"RZBackup server terminating");
+		"RZBackup server terminating normally");
+
+	0
 
 }
 
