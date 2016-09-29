@@ -61,6 +61,8 @@ impl StorageManager {
 		filesystem_cache_size: usize,
 	) -> Result <StorageManager, String> {
 
+		// get string from path
+
 		let path =
 			try! (
 
@@ -75,6 +77,26 @@ impl StorageManager {
 			)
 
 		).to_owned ();
+
+		// try and create filesystem cache path
+
+		try! (
+
+			fs::create_dir_all (
+				& path,
+			).map_err (
+				|error|
+
+				format! (
+					"Error creating filesystem cache path: {}: {}",
+					& path,
+					error.description ())
+
+			)
+
+		);
+
+		// check we can access filesystem cache path
 
 		let metadata =
 			try! (
@@ -273,14 +295,11 @@ impl StorageManager {
 		) {
 
 			Some (item_data) =>
-{
-stderr! ("-");
 				return Some (
 					futures::done (
 						Ok (item_data.clone ())
 					).boxed (),
-//				),
-)},
+				),
 
 			None =>
 				(),
@@ -301,8 +320,6 @@ stderr! ("-");
 					ref compressed_data,
 					uncompressed_size)
 			) =>
-{
-stderr! ("x");
 				return Some ({
 
 				futures::done (
@@ -327,8 +344,7 @@ stderr! ("x");
 
 				).boxed ()
 
-//			}),
-})},
+			}),
 
 			Some (
 				& mut MemoryCacheItem::Uncompressed (
@@ -357,8 +373,6 @@ stderr! ("x");
 		self_state: & mut StorageManagerState,
 		key: & str,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
-
-stderr! ("O");
 
 		match (
 
