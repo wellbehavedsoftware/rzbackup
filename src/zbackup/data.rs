@@ -49,15 +49,15 @@ pub type IndexEntry = (
 
 /// The default number of uncompressed memory cache entries. This number of
 /// chunks will be kept in memory uncompressed, in an LRU cache.
-pub const MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x800;
+pub const MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x100;
 
 /// The default number of uncompressed memory cache entries. This number of
 /// chunks will be kept in memory after LZO-compression, in an LRU cache.
-pub const MAX_COMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x4000;
+pub const MAX_COMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x800;
 
 /// The default number of compressed filesystem cache entries. This number of
 /// chunks will be stored in a temporary directory after LZO-compression.
-pub const MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES: usize = 0x20000;
+pub const MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES: usize = 0x4000;
 
 /// The default location for the filesystem cache.
 pub const FILESYSTEM_CACHE_PATH: & 'static str = "/tmp/rzbackup-cache";
