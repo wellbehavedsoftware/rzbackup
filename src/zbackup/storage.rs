@@ -177,100 +177,133 @@ impl StorageManager {
 
 		// store in memory cache
 
-		self_state.uncompressed_memory_items.insert (
-			key.deref ().to_owned (),
-			uncompressed_data.clone ());
-
-		// try and compress the data
-
-		let (compressed, stored_data) =
-			match (
-
-			minilzo::compress (
-				& uncompressed_data)
-
+		if ! self_state.uncompressed_memory_items.contains_key (
+			& key,
 		) {
 
-			Ok (compressed_data) =>
-				(true, Arc::new (compressed_data)),
+			self_state.uncompressed_memory_items.insert (
+				key.deref ().to_owned (),
+				uncompressed_data.clone ());
 
-			Err (minilzo::Error::NotCompressible) =>
-				(false, uncompressed_data.clone ()),
+		}
 
-			Err (error) =>
-				return Err (
-					format! (
-						"Error during compression: {:?}",
-						error)),
+		// check if it is compressed
 
-		};
+		let in_compressed_memory_cache =
+			self_state.compressed_memory_items.contains_key (
+				& key);
 
-		// store in compressed memory cache
+		let in_filesystem_cache =
+			self_state.filesystem_items.contains_key (
+				& key);
 
-		self_state.compressed_memory_items.insert (
-			key.deref ().to_owned (),
-			if compressed {
+		if (
+			! in_compressed_memory_cache
+			|| ! in_filesystem_cache
+		) {
 
-				MemoryCacheItem::Compressed (
-					stored_data.clone (),
-					uncompressed_data.len ())
+			// try and compress the data
 
-			} else {
+			let (compressed, stored_data) =
+				match (
 
-				MemoryCacheItem::Uncompressed (
-					stored_data.clone ())
+				minilzo::compress (
+					& uncompressed_data)
+
+			) {
+
+				Ok (compressed_data) =>
+					(true, Arc::new (compressed_data)),
+
+				Err (minilzo::Error::NotCompressible) =>
+					(false, uncompressed_data.clone ()),
+
+				Err (error) =>
+					return Err (
+						format! (
+							"Error during compression: {:?}",
+							error)),
+
+			};
+
+			// store in compressed memory cache
+
+			if ! in_compressed_memory_cache {
+
+				self_state.compressed_memory_items.insert (
+					key.deref ().to_owned (),
+					if compressed {
+
+						MemoryCacheItem::Compressed (
+							stored_data.clone (),
+							uncompressed_data.len ())
+
+					} else {
+
+						MemoryCacheItem::Uncompressed (
+							stored_data.clone ())
+
+					}
+				);
 
 			}
-		);
 
-		// write out to the filesystem
+			// write out to the filesystem
 
-		let mut output =
-			try! (
+			if ! in_filesystem_cache {
 
-			File::create (
-				& entry_path,
-			).map_err (
-				|error|
+				let mut output =
+					try! (
 
-				format! (
-					"Unable to create {}: {}",
-					& entry_path,
-					error.description ())
-			)
+					File::create (
+						& entry_path,
+					).map_err (
+						|error|
 
-		);
+						format! (
+							"Unable to create {}: {}",
+							& entry_path,
+							error.description ())
+					)
 
-		try! (
+				);
 
-			output.write (
-				& stored_data,
-			).map_err (
-				|error|
+				try! (
 
-				format! (
-					"Error writing to {}: {}",
-					entry_path,
-					error.description ())
-			)
+					output.write (
+						& stored_data,
+					).map_err (
+						|error|
 
-		);
+						format! (
+							"Error writing to {}: {}",
+							entry_path,
+							error.description ())
+					)
 
-		// create and store the filesystem item in the index
+				);
 
-		let filesystem_item =
-			FilesystemItem {
+				// create and store the filesystem item in the index
 
-			storage_manager: self.data.clone (),
-			key: key.deref ().to_owned (),
-			compressed: compressed,
-			uncompressed_size: uncompressed_data.len (),
+				let filesystem_item =
+					FilesystemItem {
 
-		};
+					storage_manager: self.data.clone (),
+					key: key.deref ().to_owned (),
+					compressed: compressed,
+					uncompressed_size: uncompressed_data.len (),
 
-		self_state.filesystem_items.insert (
-			key.deref ().to_owned (),
-			filesystem_item);
+				};
+
+				self_state.filesystem_items.insert (
+					key.deref ().to_owned (),
+					filesystem_item);
+
+			}
+
+		}
+
+		// return
 
 		Ok (())
 
