@@ -9,6 +9,15 @@ use rzbackup::Repository;
 
 fn main () {
 
+	process::exit (
+		main_real (),
+	);
+
+}
+
+fn main_real (
+) -> i32 {
+
 	let arguments: Vec <String> =
 		env::args ().collect ();
 
@@ -18,7 +27,7 @@ fn main () {
 			"Syntax: {} REPOSITORY PASSWORD-FILE BACKUP",
 			arguments [0]);
 
-		process::exit (1);
+		return 1;
 
 	}
 
@@ -46,7 +55,7 @@ fn main () {
 				"Error opening repository: {}",
 				error);
 
-			process::exit (1);
+			return 1;
 
 		},
 
@@ -64,7 +73,7 @@ fn main () {
 
 		Ok (_) => {
 
-			process::exit (0);
+			return 0;
 
 		},
 
@@ -74,7 +83,7 @@ fn main () {
 				"Error performing restore: {}",
 				error);
 
-			process::exit (1);
+			return 1;
 
 		},
 
