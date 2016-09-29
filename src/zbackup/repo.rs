@@ -56,6 +56,8 @@ pub struct RepositoryConfig {
 	pub max_compressed_filesystem_cache_entries: usize,
 	pub max_threads: usize,
 	pub filesystem_cache_path: String,
+	pub work_jobs_total: usize,
+	pub work_jobs_batch: usize,
 }
 
 struct RepositoryData {
@@ -108,6 +110,12 @@ impl Repository {
 
 			filesystem_cache_path:
 				FILESYSTEM_CACHE_PATH.to_owned (),
+
+			work_jobs_total:
+				WORK_JOBS_TOTAL,
+
+			work_jobs_batch:
+				WORK_JOBS_BATCH,
 
 		}
 
@@ -646,6 +654,9 @@ impl Repository {
 		progress: & Fn (u64),
 	) -> Result <(), String> {
 
+		let config =
+			& self.data.config;
+
 		let mut coded_input_stream =
 			CodedInputStream::new (
 				input);
@@ -675,7 +686,10 @@ impl Repository {
 					job_count > 0
 				) && (
 					eof
-					|| job_count >= WORK_JOBS_TOTAL - WORK_JOBS_BATCH
+					|| job_count >= (
+						config.work_jobs_total
+						- config.work_jobs_batch
+					)
 				)
 			) {
 
@@ -700,7 +714,8 @@ impl Repository {
 				count += 1;
 
 				job_position =
-					(job_position + 1) % WORK_JOBS_TOTAL;
+					(job_position + 1)
+						% config.work_jobs_total;
 
 				job_count -= 1;
 

@@ -21,6 +21,8 @@ struct DefaultArgumentStringValues {
 	max_compressed_filesystem_cache_entries: String,
 	max_threads: String,
 	filesystem_cache_path: String,
+	work_jobs_total: String,
+	work_jobs_batch: String,
 }
 
 fn build_default_argument_string_values (
@@ -42,6 +44,12 @@ fn build_default_argument_string_values (
 
 		filesystem_cache_path:
 			rzbackup::FILESYSTEM_CACHE_PATH.to_string (),
+
+		work_jobs_total:
+			rzbackup::WORK_JOBS_TOTAL.to_string (),
+
+		work_jobs_batch:
+			rzbackup::WORK_JOBS_BATCH.to_string (),
 
 	}
 
@@ -190,6 +198,26 @@ fn build_repository_config (
 			argument_matches.value_of (
 				"filesystem-cache-path",
 			).unwrap ().to_owned (),
+
+		work_jobs_total:
+			value_t! (
+				argument_matches,
+				"work-jobs-total",
+				usize
+			).unwrap_or_else (
+				|error|
+				error.exit ()
+			),
+
+		work_jobs_batch:
+			value_t! (
+				argument_matches,
+				"work-jobs-batch",
+				usize
+			).unwrap_or_else (
+				|error|
+				error.exit ()
+			),
 
 	}
 
@@ -347,6 +375,40 @@ fn build_clap_app <'a, 'b> (
 			false,
 		).default_value (
 			& defaults.filesystem_cache_path,
+		)
+	)
+
+	.arg (
+		Arg::with_name (
+			"work-jobs-total",
+		).long (
+			"work-jobs-total",
+		).value_name (
+			"JOBS",
+		).help (
+			"Number of decompression jobs to start in parallel while \
+			performining a restore. This is basically the amount of lookahead \
+			which is performed during the restore, and allows multiple bundles \
+			to be decompressed in parellel, taking advantage of more than one \
+			CPU core."
+		).default_value (
+			& defaults.work_jobs_total,
+		)
+	)
+
+	.arg (
+		Arg::with_name (
+			"work-jobs-batch",
+		).long (
+			"work-jobs-batch",
+		).value_name (
+			"JOBS",
+		).help (
+			"Number of jobs to add or remove from the work list at one time. \
+			This is supposed to make this process slightly more efficient by \
+			reducing locking."
+		).default_value (
+			& defaults.work_jobs_batch,
 		)
 	)
 
