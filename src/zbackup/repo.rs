@@ -189,7 +189,7 @@ impl Repository {
 			try! (
 
 			StorageManager::new (
-				"/tmp/storage",
+				repository_config.filesystem_cache_path.clone (),
 				cpu_pool.clone (),
 				repository_config.max_uncompressed_memory_cache_entries,
 				repository_config.max_compressed_memory_cache_entries,
