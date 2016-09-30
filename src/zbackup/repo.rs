@@ -67,11 +67,12 @@ struct RepositoryData {
 	encryption_key: Option <EncryptionKey>,
 }
 
-type BundleWaiter = Complete <Result <ChunkMap, String>>;
+type ChunkWaiter = Complete <Result <ChunkData, String>>;
+type BundleWaiters = HashMap <ChunkId, Vec <ChunkWaiter>>;
 
 struct RepositoryState {
 	master_index: Option <MasterIndex>,
-	bundle_waiters: HashMap <BundleId, Vec <BundleWaiter>>,
+	bundle_waiters: HashMap <BundleId, BundleWaiters>,
 }
 
 /// This is the main struct which implements the ZBackup restore functionality.
@@ -880,13 +881,13 @@ impl Repository {
 
 		// load bundle if chunk is not available
 
-		self.get_chunk_from_bundle (
+		self.load_chunk_async (
 			self_state.deref_mut (),
 			& chunk_id)
 
 	}
 
-	fn get_chunk_from_bundle (
+	fn load_chunk_async (
 		& self,
 		self_state: & mut RepositoryState,
 		chunk_id: & ChunkId,
@@ -917,8 +918,7 @@ impl Repository {
 
 		};
 
-		// load bundle
-
+/*
 		let get_bundle_future =
 			self.get_bundle_async (
 				self_state,
@@ -947,21 +947,9 @@ impl Repository {
 			)
 
 		).boxed ()
+*/
 
-	}
-
-	fn get_bundle_async (
-		& self,
-		self_state: & mut RepositoryState,
-		bundle_id: BundleId,
-	) -> BoxFuture <ChunkMap, String> {
-
-		let bundle_path =
-			format! (
-				"{}/bundles/{}/{}",
-				self.data.path,
-				& bundle_id.to_hex () [0 .. 2],
-				bundle_id.to_hex ());
+		// check if bundle is already being loaded
 
 		if (
 
@@ -970,110 +958,205 @@ impl Repository {
 
 		) {
 
-			let (complete, future) =
-				futures::oneshot ();
-
-			self_state.bundle_waiters.get_mut (
-				& bundle_id,
-			).unwrap ().push (
-				complete,
-			);
-
-			future.map_err (
-				|_|
-
-				"Cancelled".to_owned ()
-
-			).and_then (
-				|chunk_maps_result| {
-
-				chunk_maps_result
-
-			}).boxed ()
+			self.join_load_chunk_async (
+				self_state,
+				chunk_id.clone (),
+				bundle_id)
 
 		} else {
 
-			self_state.bundle_waiters.insert (
-				bundle_id,
-				Vec::new ());
-
-			let mut self_clone =
-				self.clone ();
-
-			self.cpu_pool.spawn_fn (
-				move || {
-
-				let chunk_map_result = (
-
-					read_bundle (
-						bundle_path,
-						self_clone.data.encryption_key)
-
-				).map_err (
-					|original_error| {
-
-					format! (
-						"Error reading bundle {}: {}",
-						bundle_id.to_hex (),
-						original_error)
-
-				}).map (
-					move |bundle_data| {
-
-					let mut chunk_map =
-						HashMap::new ();
-
-					for (found_chunk_id, found_chunk_data) in bundle_data {
-
-						chunk_map.insert (
-							found_chunk_id,
-							Arc::new (
-								found_chunk_data));
-
-					}
-
-					Arc::new (chunk_map)
-
-				});
-
-				// store chunk data in cache
-
-				let mut self_state =
-					self_clone.state.lock ().unwrap ();
-
-				for (chunk_id, chunk_data)
-				in chunk_map_result.as_ref ().unwrap_or (
-					& Arc::new (HashMap::new ()),
-				).iter () {
-
-					try! (
-						self_clone.storage_manager.insert (
-							chunk_id.to_hex (),
-							chunk_data.clone ()));
-
-				}
-
-				// notify other processes waiting for the same bundle
-
-				let bundle_waiters =
-					self_state.bundle_waiters.remove (
-						& bundle_id,
-					).unwrap ();
-
-				for bundle_waiter in bundle_waiters {
-
-					bundle_waiter.complete (
-						chunk_map_result.clone ());
-
-				}
-
-				// return
-
-				chunk_map_result
-
-			}).boxed ()
+			self.start_load_chunk_async (
+				self_state,
+				chunk_id.clone (),
+				bundle_id)
 
 		}
+
+	}
+
+	fn join_load_chunk_async (
+		& self,
+		self_state: & mut RepositoryState,
+		chunk_id: ChunkId,
+		bundle_id: BundleId,
+	) -> BoxFuture <ChunkData, String> {
+
+		let (complete, future) =
+			futures::oneshot ();
+
+		let bundle_waiters =
+			self_state.bundle_waiters.get_mut (
+				& bundle_id,
+			).unwrap ();
+
+		if (
+
+			! bundle_waiters.contains_key (
+				& chunk_id)
+
+		) {
+
+			bundle_waiters.insert (
+				chunk_id.clone (),
+				Vec::new ());
+
+		}
+
+		bundle_waiters.get_mut (
+			& chunk_id,
+		).unwrap ().push (
+			complete,
+		);
+
+		future.map_err (
+			|_|
+
+			"Cancelled".to_owned ()
+
+		).and_then (
+			|chunk_data_result| {
+
+			chunk_data_result
+
+		}).boxed ()
+
+	}
+
+	fn start_load_chunk_async (
+		& self,
+		self_state: & mut RepositoryState,
+		chunk_id: ChunkId,
+		bundle_id: BundleId,
+	) -> BoxFuture <ChunkData, String> {
+
+		let bundle_path =
+			format! (
+				"{}/bundles/{}/{}",
+				self.data.path,
+				& bundle_id.to_hex () [0 .. 2],
+				bundle_id.to_hex ());
+
+		self_state.bundle_waiters.insert (
+			bundle_id.clone (),
+			HashMap::new ());
+
+		let mut self_clone =
+			self.clone ();
+
+		self.cpu_pool.spawn_fn (
+			move || {
+
+			let chunk_map_result = (
+
+				read_bundle (
+					bundle_path,
+					self_clone.data.encryption_key)
+
+			).map_err (
+				|original_error| {
+
+				format! (
+					"Error reading bundle {}: {}",
+					bundle_id.to_hex (),
+					original_error)
+
+			}).map (
+				move |bundle_data| {
+
+				let mut chunk_map =
+					HashMap::new ();
+
+				for (found_chunk_id, found_chunk_data) in bundle_data {
+
+					chunk_map.insert (
+						found_chunk_id,
+						Arc::new (
+							found_chunk_data));
+
+				}
+
+				Arc::new (chunk_map)
+
+			});
+
+			// store chunk data in cache
+
+			let mut self_state =
+				self_clone.state.lock ().unwrap ();
+
+			let chunk_map =
+				chunk_map_result.unwrap_or (
+					Arc::new (
+						HashMap::new ()));
+
+			for (chunk_id, chunk_data)
+			in chunk_map.iter () {
+
+				try! (
+					self_clone.storage_manager.insert (
+						chunk_id.to_hex (),
+						chunk_data.clone ()));
+
+			}
+
+			// notify other processes waiting for the same bundle
+
+			let bundle_waiters =
+				self_state.bundle_waiters.remove (
+					& bundle_id,
+				).unwrap ();
+
+			for (chunk_id, chunk_waiters)
+			in bundle_waiters {
+
+				let chunk_data_result = (
+
+					chunk_map.get (
+						& chunk_id,
+					).ok_or_else (
+						||
+
+						format! (
+							"Expected to find chunk {} in bundle {}",
+							chunk_id.to_hex (),
+							bundle_id.to_hex ())
+
+					)
+
+				);
+
+				for chunk_waiter in chunk_waiters {
+
+					chunk_waiter.complete (
+						chunk_data_result.clone (
+						).map (
+							|chunk_data|
+							chunk_data.clone ()
+						),
+					);
+
+				}
+
+			}
+
+			// return
+
+			chunk_map.get (
+				& chunk_id,
+			).ok_or_else (
+				||
+
+				format! (
+					"Expected to find chunk {} in bundle {}",
+					chunk_id.to_hex (),
+					bundle_id.to_hex ())
+
+			).map (
+				|chunk_data|
+				chunk_data.clone ()
+			)
+
+		}).boxed ()
 
 	}
 
