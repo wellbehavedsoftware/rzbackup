@@ -17,6 +17,7 @@ use protobuf::stream::CodedInputStream;
 use rustc_serialize::hex::ToHex;
 
 use std::collections::HashMap;
+use std::collections::LinkedList;
 use std::fs;
 use std::io::Cursor;
 use std::io::Read;
@@ -70,9 +71,14 @@ struct RepositoryData {
 type ChunkWaiter = Complete <Result <ChunkData, String>>;
 type BundleWaiters = HashMap <ChunkId, Vec <ChunkWaiter>>;
 
+type FutureChunkWaiter = Complete <BoxFuture <ChunkData, String>>;
+type FutureBundleWaiters = HashMap <ChunkId, Vec <FutureChunkWaiter>>;
+
 struct RepositoryState {
 	master_index: Option <MasterIndex>,
-	bundle_waiters: HashMap <BundleId, BundleWaiters>,
+	bundles_loading: HashMap <BundleId, BundleWaiters>,
+	bundles_to_load: HashMap <BundleId, FutureBundleWaiters>,
+	bundles_to_load_list: LinkedList <BundleId>,
 }
 
 /// This is the main struct which implements the ZBackup restore functionality.
@@ -190,7 +196,7 @@ impl Repository {
 
 		let cpu_pool =
 			CpuPool::new (
-				repository_config.max_threads);
+				repository_config.max_threads * 2);
 
 		// create storage manager
 
@@ -207,10 +213,11 @@ impl Repository {
 
 		);
 
-		// return
+		// create data
 
 		let repository_data =
-			RepositoryData {
+			Arc::new (
+				RepositoryData {
 
 			config: repository_config,
 
@@ -218,33 +225,37 @@ impl Repository {
 			storage_info: storage_info,
 			encryption_key: encryption_key,
 
-		};
+		});
+
+		// create state
 
 		let repository_state =
-			RepositoryState {
+			Arc::new (
+				Mutex::new (
+					RepositoryState {
 
 			master_index:
 				None,
 
-			bundle_waiters:
+			bundles_loading:
 				HashMap::new (),
 
-		};
+			bundles_to_load:
+				HashMap::new (),
+
+			bundles_to_load_list:
+				LinkedList::new (),
+
+		}));
+
+		// return
 
 		Ok (Repository {
 
-			data: Arc::new (
-				repository_data),
-
-			state: Arc::new (
-				Mutex::new (
-					repository_state)),
-
-			cpu_pool:
-				cpu_pool,
-
-			storage_manager:
-				storage_manager,
+			data: repository_data,
+			state: repository_state,
+			cpu_pool: cpu_pool,
+			storage_manager: storage_manager,
 
 		})
 
@@ -843,6 +854,35 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> BoxFuture <ChunkData, String> {
 
+		self.get_chunk_async_async (
+			chunk_id,
+		).and_then (
+			|future|
+
+			future.wait ()
+
+		).boxed ()
+
+	}
+
+	/// This will load a single chunk from the repository, returning immediately
+	/// with a future which will complete immediately if the chunk is in cache,
+	/// with a future which will complete immediately with the chunk data.
+	///
+	/// If the chunk is not in cache, the returned future will wait until there
+	/// is an available thread to start loading the bundle containing the
+	/// chunk's data. It will then complete with a future which will in turn
+	/// complete when the bundle has been loaded.
+	///
+	/// This double-asynchronicity allows consumers to efficiently use all
+	/// available threads while blocking when none are available. This should
+	/// significantly reduce worst-case memory usage.
+
+	pub fn get_chunk_async_async (
+		& self,
+		chunk_id: ChunkId,
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
+
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
@@ -868,12 +908,15 @@ impl Repository {
 		match (
 
 			self.storage_manager.get (
-				& chunk_id.to_hex ())
+				& chunk_id.to_hex (),
+			)
 
 		) {
 
 			Some (chunk_data_future) =>
-				return chunk_data_future,
+				return futures::done (
+					Ok (chunk_data_future),
+				).boxed (),
 
 			None => (),
 
@@ -881,24 +924,24 @@ impl Repository {
 
 		// load bundle if chunk is not available
 
-		self.load_chunk_async (
+		self.load_chunk_async_async (
 			self_state.deref_mut (),
-			& chunk_id)
+			chunk_id)
 
 	}
 
-	fn load_chunk_async (
+	fn load_chunk_async_async (
 		& self,
 		self_state: & mut RepositoryState,
-		chunk_id: & ChunkId,
-	) -> BoxFuture <ChunkData, String> {
+		chunk_id: ChunkId,
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
 		// get bundle id
 
 		let bundle_id = match (
 
 			self_state.master_index.as_ref ().unwrap ().get (
-				chunk_id,
+				& chunk_id,
 			).clone ()
 
 		) {
@@ -918,76 +961,90 @@ impl Repository {
 
 		};
 
-/*
-		let get_bundle_future =
-			self.get_bundle_async (
-				self_state,
-				bundle_id);
+		self.load_chunk_async_async_real (
+			self_state,
+			chunk_id,
+			bundle_id)
 
-		let chunk_id_copy =
-			chunk_id.clone ();
+	}
 
-		get_bundle_future.and_then (
-			move |chunk_map|
+	fn load_chunk_async_async_real (
+		& self,
+		self_state: & mut RepositoryState,
+		chunk_id: ChunkId,
+		bundle_id: BundleId,
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
-			chunk_map.get (
-				& chunk_id_copy,
-			).ok_or (
+		let self_clone =
+			self.clone ();
 
-				format! (
-					"Expected to find chunk {} in bundle {}",
-					chunk_id_copy.to_hex (),
-					bundle_id.to_hex ())
+		// if it's already being loaded then we can join in
 
-			).map (
-				|chunk_data|
+		if self_state.bundles_loading.contains_key (
+			& bundle_id) {
 
-				chunk_data.clone ()
+			return futures::done (
+				Ok (
 
-			)
+				self_clone.join_load_chunk_async (
+					& mut self_state.bundles_loading.get_mut (
+						& bundle_id,
+					).unwrap (),
+					chunk_id.clone ())
 
-		).boxed ()
-*/
+				)
 
-		// check if bundle is already being loaded
-
-		if (
-
-			self_state.bundle_waiters.contains_key (
-				& bundle_id)
-
-		) {
-
-			self.join_load_chunk_async (
-				self_state,
-				chunk_id.clone (),
-				bundle_id)
-
-		} else {
-
-			self.start_load_chunk_async (
-				self_state,
-				chunk_id.clone (),
-				bundle_id)
+			).boxed ();
 
 		}
+
+		// start a load if there is a slot
+
+		if self_state.bundles_loading.len ()
+			< self.data.config.max_threads {
+
+			return futures::done (Ok (
+
+				self_clone.start_load_chunk_async (
+					self_state,
+					chunk_id.clone (),
+					bundle_id,
+				)
+
+			)).boxed ();
+
+		}
+
+		// add to future bundle loaders
+
+		if ! self_state.bundles_to_load.contains_key (
+			& bundle_id) {
+
+			self_state.bundles_to_load.insert (
+				bundle_id.clone (),
+				HashMap::new ());
+
+			self_state.bundles_to_load_list.push_back (
+				bundle_id.clone ());
+
+		}
+
+		self.join_future_load_chunk_async (
+			self_state.bundles_to_load.get_mut (
+				& bundle_id,
+			).unwrap (),
+			chunk_id)
 
 	}
 
 	fn join_load_chunk_async (
 		& self,
-		self_state: & mut RepositoryState,
+		bundle_waiters: & mut BundleWaiters,
 		chunk_id: ChunkId,
-		bundle_id: BundleId,
 	) -> BoxFuture <ChunkData, String> {
 
 		let (complete, future) =
 			futures::oneshot ();
-
-		let bundle_waiters =
-			self_state.bundle_waiters.get_mut (
-				& bundle_id,
-			).unwrap ();
 
 		if (
 
@@ -1022,6 +1079,54 @@ impl Repository {
 
 	}
 
+	fn join_future_load_chunk_async (
+		& self,
+		bundle_waiters: & mut FutureBundleWaiters,
+		chunk_id: ChunkId,
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
+
+		// insert chunk id if it does not already exist
+
+		if (
+
+			! bundle_waiters.contains_key (
+				& chunk_id)
+
+		) {
+
+			bundle_waiters.insert (
+				chunk_id.clone (),
+				Vec::new ());
+
+		}
+
+		// add oneshot to list
+
+		let (complete, future) =
+			futures::oneshot ();
+
+		bundle_waiters.get_mut (
+			& chunk_id,
+		).unwrap ().push (
+			complete,
+		);
+
+		// return appropriately typed future
+
+		future.and_then (
+			|next_future|
+
+			Ok (next_future)
+
+		).map_err (
+			|_|
+
+			"Cancelled".to_string ()
+
+		).boxed ()
+
+	}
+
 	fn start_load_chunk_async (
 		& self,
 		self_state: & mut RepositoryState,
@@ -1036,7 +1141,7 @@ impl Repository {
 				& bundle_id.to_hex () [0 .. 2],
 				bundle_id.to_hex ());
 
-		self_state.bundle_waiters.insert (
+		self_state.bundles_loading.insert (
 			bundle_id.clone (),
 			HashMap::new ());
 
@@ -1102,7 +1207,7 @@ impl Repository {
 			// notify other processes waiting for the same bundle
 
 			let bundle_waiters =
-				self_state.bundle_waiters.remove (
+				self_state.bundles_loading.remove (
 					& bundle_id,
 				).unwrap ();
 
@@ -1139,6 +1244,11 @@ impl Repository {
 
 			}
 
+			// start loading next chunks
+
+			self_clone.start_loading_next_chunks (
+				self_state.deref_mut ());
+
 			// return
 
 			chunk_map.get (
@@ -1157,6 +1267,90 @@ impl Repository {
 			)
 
 		}).boxed ()
+
+	}
+
+	fn start_loading_next_chunks (
+		& self,
+		self_state: & mut RepositoryState,
+	) {
+
+		let bundle_id = match (
+			self_state.bundles_to_load_list.pop_front ()
+		) {
+
+			Some (bundle_id) =>
+				bundle_id,
+
+			None =>
+				return,
+
+		};
+
+		let mut bundle_waiters =
+			self_state.bundles_to_load.remove (
+				& bundle_id,
+			).unwrap ();
+
+		// first waiter of first chunk starts things off
+
+		let first_chunk_id =
+			bundle_waiters.keys ().next ().unwrap ().clone ();
+
+		let first_waiters =
+			bundle_waiters.remove (
+				& first_chunk_id,
+			).unwrap ();
+
+		let mut first_waiters_iterator =
+			first_waiters.into_iter ();
+
+		first_waiters_iterator.next ().unwrap ().complete (
+
+			self.start_load_chunk_async (
+				self_state,
+				first_chunk_id.clone (),
+				bundle_id,
+			)
+
+		);
+
+		// the rest join in
+
+		let new_bundle_waiters =
+			self_state.bundles_loading.get_mut (
+				& bundle_id,
+			).unwrap ();
+
+		for first_waiter in first_waiters_iterator {
+
+			first_waiter.complete (
+
+				self.join_load_chunk_async (
+					new_bundle_waiters,
+					first_chunk_id.clone (),
+				)
+
+			);
+
+		}
+
+		for (chunk_id, waiters) in bundle_waiters {
+
+			for waiter in waiters {
+
+				waiter.complete (
+
+					self.join_load_chunk_async (
+						new_bundle_waiters,
+						chunk_id.clone (),
+					)
+
+				);
+
+			}
+
+		}
 
 	}
 
