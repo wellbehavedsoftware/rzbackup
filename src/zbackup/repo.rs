@@ -617,15 +617,15 @@ impl Repository {
 
 	}
 
-	fn follow_instruction_async (
+	fn follow_instruction_async_async (
 		& self,
 		backup_instruction: & proto::BackupInstruction,
-	) -> BoxFuture <ChunkData, String> {
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
 		if backup_instruction.has_chunk_to_emit ()
 		&& backup_instruction.has_bytes_to_emit () {
 
-			futures::failed::<ChunkData, String> (
+			futures::failed::<BoxFuture <ChunkData, String>, String> (
 				"Instruction with both chunk and bytes".to_string ()
 			).boxed ()
 
@@ -635,22 +635,24 @@ impl Repository {
 				to_array (
 					backup_instruction.get_chunk_to_emit ());
 
-			self.get_chunk_async (
+			self.get_chunk_async_async (
 				chunk_id,
 			)
 
 		} else if backup_instruction.has_bytes_to_emit () {
 
-			futures::done (
-				Ok (
-					Arc::new (
-						backup_instruction.get_bytes_to_emit ().to_vec ())
-				)
-			).boxed ()
+			futures::done (Ok (
+				futures::done (Ok (
+
+				Arc::new (
+					backup_instruction.get_bytes_to_emit ().to_vec ())
+
+				)).boxed ()
+			)).boxed ()
 
 		} else {
 
-			futures::failed::<ChunkData, String> (
+			futures::failed::<BoxFuture <ChunkData, String>, String> (
 				"Instruction with neither chunk or bytes".to_string ()
 			).boxed ()
 
@@ -666,163 +668,217 @@ impl Repository {
 		progress: & Fn (u64),
 	) -> Result <(), String> {
 
-		let config =
-			& self.data.config;
-
 		let mut coded_input_stream =
 			CodedInputStream::new (
 				input);
 
 		let mut count: u64 = 0;
 
-		type Job =
-			BoxFuture <ChunkData, String>;
+		enum JobTarget {
+			Chunk (ChunkData),
+			FutureChunk (BoxFuture <ChunkData, String>),
+		}
 
-		let mut job_list: Vec <Job> =
-			vec! [];
+		type Job = BoxFuture <JobTarget, String>;
 
-		let mut job_position: usize = 0;
-		let mut job_count: usize = 0;
+		let mut current_chunk_job: Option <Job> =
+			None;
+
+		let mut next_chunk_jobs: LinkedList <Job> =
+			LinkedList::new ();
+
+		let mut future_chunk_job: Option <Job> =
+			None;
 
 		let mut eof = false;
 
-		while (
-			! eof
-			|| job_count > 0
-		) {
+		loop {
 
-			// consume job results
+			// load next instruction, if we have room
 
-			while (
-				(
-					job_count > 0
-				) && (
-					eof
-					|| job_count >= (
-						config.work_jobs_total
-						- config.work_jobs_batch
-					)
-				)
-			) {
+			if future_chunk_job.is_none () && ! eof {
 
-				let job_future =
-					& mut job_list [job_position];
-
-				let job_result =
-					job_future.wait ();
-
-				let job_content =
+				if (
 					try! (
-						job_result);
+						protobuf_result (
+							coded_input_stream.eof ()))
+				) {
 
-				try! (
-					io_result (
-						output.write (
-							& job_content)));
+					eof = true;
 
-				progress (
-					count);
+				} else {
 
-				count += 1;
+					let instruction_length =
+						try! (
+							protobuf_result (
+								coded_input_stream.read_raw_varint32 ()));
 
-				job_position =
-					(job_position + 1)
-						% config.work_jobs_total;
+					let instruction_old_limit =
+						try! (
 
-				job_count -= 1;
+						protobuf_result (
+							coded_input_stream.push_limit (
+								instruction_length))
+
+					);
+
+					let backup_instruction =
+						try! (
+
+						protobuf_result (
+							protobuf::core::parse_from::<
+								proto::BackupInstruction
+							> (
+								& mut coded_input_stream,
+							),
+						)
+
+					);
+
+					coded_input_stream.pop_limit (
+						instruction_old_limit);
+
+					future_chunk_job = Some (
+
+						self.follow_instruction_async_async (
+							& backup_instruction,
+						).map (
+							|future_chunk_data|
+
+							JobTarget::FutureChunk (
+								future_chunk_data)
+
+						).boxed ()
+
+					);
+
+				}
 
 			}
 
-			// start jobs
+			// wait for something to happen
+
+			if current_chunk_job.is_none () {
+
+				current_chunk_job =
+					next_chunk_jobs.pop_front ();
+
+			}
+
+			let completed_job_target;
 
 			if (
-				! eof
-				&& job_count < WORK_JOBS_TOTAL
+				current_chunk_job.is_some ()
+				&& future_chunk_job.is_some ()
 			) {
 
-				let mut backup_instructions =
-					vec! [];
+				let (value, index, remaining_future) = match
+					futures::select_all (
 
-				{
+					vec! [
+						current_chunk_job.unwrap (),
+						future_chunk_job.unwrap (),
+					]
 
-					while (
-						! eof
-						&& job_count + backup_instructions.len ()
-							< WORK_JOBS_TOTAL
-					) {
+				).wait () {
 
-						if (
-							try! (
-								protobuf_result (
-									coded_input_stream.eof ()))
-						) {
-							eof = true;
-							break;
-						}
+					Ok (tuple) =>
+						tuple,
 
-						let instruction_length =
-							try! (
-								protobuf_result (
-									coded_input_stream.read_raw_varint32 ()));
+					Err (_error_tuple) =>
+						panic! ("ERR1"),
 
-						let instruction_old_limit =
-							try! (
-								protobuf_result (
-									coded_input_stream.push_limit (
-										instruction_length)));
+				};
 
-						let backup_instruction =
-							try! (
+				if index == 0 {
 
-							protobuf_result (
-								protobuf::core::parse_from::<
-									proto::BackupInstruction
-								> (
-									& mut coded_input_stream,
-								),
-							)
+					future_chunk_job = Some (
 
-						);
+						remaining_future.into_iter ()
+							.next ()
+							.unwrap ()
+							.boxed ()
 
-						backup_instructions.push (
-							backup_instruction);
+					);
 
-						coded_input_stream.pop_limit (
-							instruction_old_limit);
+					current_chunk_job = None;
 
-					}
+				} else {
+
+					current_chunk_job = Some (
+
+						remaining_future.into_iter ()
+							.next ()
+							.unwrap ()
+							.boxed ()
+
+					);
+
+					future_chunk_job = None;
 
 				}
 
-				for backup_instruction in backup_instructions {
+				completed_job_target =
+					value;
 
-					let new_job_future = (
+			} else if current_chunk_job.is_some () {
 
-						self.follow_instruction_async (
-							& backup_instruction)
+				completed_job_target =
+					current_chunk_job.unwrap ().wait ().unwrap ();
 
-					).boxed ();
+				current_chunk_job = None;
 
-					let new_job_position =
-						(job_position + job_count) % WORK_JOBS_TOTAL;
+			} else if future_chunk_job.is_some () {
 
-					if new_job_position == job_list.len () {
+				completed_job_target =
+					future_chunk_job.unwrap ().wait ().unwrap ();
 
-						job_list.push (
-							new_job_future);
+				future_chunk_job = None;
 
-					} else {
+			} else {
 
-						job_list [new_job_position] =
-							new_job_future;
-
-					}
-
-					job_count += 1;
-
-				}
+				break;
 
 			}
+
+			// handle the something that happened
+
+			match completed_job_target {
+
+				JobTarget::Chunk (chunk_data) => {
+
+					try! (
+						io_result (
+
+						output.write (
+							& chunk_data)
+
+					));
+
+					progress (
+						count);
+
+					count += 1;
+
+				},
+
+				JobTarget::FutureChunk (future_chunk) => {
+
+					next_chunk_jobs.push_back (
+
+						future_chunk.map (
+							|chunk_data|
+
+							JobTarget::Chunk (
+								chunk_data)
+
+						).boxed ()
+
+					);
+
+				},
+
+			};
 
 		}
 
