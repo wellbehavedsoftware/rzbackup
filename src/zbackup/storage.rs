@@ -41,7 +41,7 @@ enum MemoryCacheItem {
 struct StorageManagerState {
 	uncompressed_memory_items: LruCache <String, Arc <Vec <u8>>>,
 	compressed_memory_items: LruCache <String, MemoryCacheItem>,
-	filesystem_items: LruCache <String, FilesystemItem>,
+	filesystem_items: LruCache <String, Arc <FilesystemItem>>,
 }
 
 struct FilesystemItem {
@@ -49,6 +49,7 @@ struct FilesystemItem {
 	key: String,
 	compressed: bool,
 	uncompressed_size: usize,
+	stored_size: usize,
 }
 
 impl StorageManager {
@@ -291,13 +292,14 @@ impl StorageManager {
 					storage_manager: self.data.clone (),
 					key: key.deref ().to_owned (),
 					compressed: compressed,
+					stored_size: stored_data.len (),
 					uncompressed_size: uncompressed_data.len (),
 
 				};
 
 				self_state.filesystem_items.insert (
 					key.deref ().to_owned (),
-					filesystem_item);
+					Arc::new (filesystem_item));
 
 			}
 
@@ -338,6 +340,18 @@ impl StorageManager {
 				(),
 		};
 
+		self.get_compressed (
+			self_state.deref_mut (),
+			key)
+
+	}
+
+	fn get_compressed (
+		& self,
+		self_state: & mut StorageManagerState,
+		key: & str,
+	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
+
 		// try in compressed memory cache
 
 		match (
@@ -355,27 +369,51 @@ impl StorageManager {
 			) =>
 				return Some ({
 
-				futures::done (
+				let self_clone =
+					self.clone ();
 
-					minilzo::decompress (
-						& compressed_data,
-						uncompressed_size,
-					).map (
-						|uncompressed_data|
+				let compressed_data =
+					compressed_data.clone ();
 
-						Arc::new (
-							uncompressed_data)
+				let key =
+					key.to_owned ();
 
-					).map_err (
-						|error|
+				self.cpu_pool.spawn_fn (
+					move || {
 
-						format! (
-							"Decompression failed: {:?}",
-							error)
+					let uncompressed_data =
+						try! (
 
-					)
+						minilzo::decompress (
+							& compressed_data,
+							uncompressed_size,
+						).map (
+							|uncompressed_data|
 
-				).boxed ()
+							Arc::new (
+								uncompressed_data)
+
+						).map_err (
+							|error|
+
+							format! (
+								"Decompression failed: {:?}",
+								error)
+
+						)
+
+					);
+
+					let mut self_state =
+						self_clone.state.lock ().unwrap ();
+
+					self_state.uncompressed_memory_items.insert (
+						key,
+						uncompressed_data.clone ());
+
+					Ok (uncompressed_data)
+
+				}).boxed ()
 
 			}),
 
@@ -396,13 +434,14 @@ impl StorageManager {
 
 		// try in compressed filesystem cache
 
-		Self::get_filesystem (
-			self_state.deref_mut (),
+		self.get_filesystem (
+			self_state,
 			key)
 
 	}
 
 	fn get_filesystem (
+		& self,
 		self_state: & mut StorageManagerState,
 		key: & str,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
@@ -417,32 +456,49 @@ impl StorageManager {
 
 			Some (filesystem_item) => {
 
-				let uncompressed_data =
-					match (
+				let self_clone =
+					self.clone ();
 
-					filesystem_item.get ()
+				let filesystem_item =
+					filesystem_item.clone ();
 
-				) {
+				let key =
+					key.to_owned ();
 
-					Ok (data) =>
-						data,
+				Some (self.cpu_pool.spawn_fn (
+					move || {
 
-					Err (error) =>
-						return Some (
-							futures::failed (
-								error,
-							).boxed ()
-						),
+					let (uncompressed_data, compressed_data) =
+						try! (
+							filesystem_item.get ());
 
-				};
+					let mut self_state =
+						self_clone.state.lock ().unwrap ();
 
-				self_state.uncompressed_memory_items.insert (
-					key.to_owned (),
-					uncompressed_data.clone ());
+					if compressed_data.is_some () {
 
-				Some (futures::done (
+						self_state.compressed_memory_items.insert (
+							key.clone (),
+							MemoryCacheItem::Compressed (
+								compressed_data.unwrap (),
+								uncompressed_data.len ()));
+
+						self_state.uncompressed_memory_items.insert (
+							key,
+							uncompressed_data.clone ());
+
+					} else {
+
+						self_state.compressed_memory_items.insert (
+							key,
+							MemoryCacheItem::Uncompressed (
+								uncompressed_data.clone ()));
+
+					}
+
 					Ok (uncompressed_data)
-				).boxed ())
+
+				}).boxed ())
 
 			},
 
@@ -470,7 +526,7 @@ impl FilesystemItem {
 
 	fn get (
 		& self,
-	) -> Result <Arc <Vec <u8>>, String> {
+	) -> Result <(Arc <Vec <u8>>, Option <Arc <Vec <u8>>>), String> {
 
 		let mut file =
 			try! (
@@ -490,7 +546,8 @@ impl FilesystemItem {
 		);
 
 		let mut stored_data =
-			Vec::new ();
+			Vec::with_capacity (
+				self.stored_size);
 
 		try! (
 
@@ -529,15 +586,22 @@ impl FilesystemItem {
 			));
 
 			Ok (
-				uncompressed_data
+
+				(
+					uncompressed_data,
+					Some (Arc::new (stored_data)),
+				)
+
 			)
 
 		} else {
 
 			Ok (
 
-				Arc::new (
-					stored_data)
+				(
+					Arc::new (stored_data),
+					None,
+				)
 
 			)
 
