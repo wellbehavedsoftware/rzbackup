@@ -196,7 +196,7 @@ impl Repository {
 
 		let cpu_pool =
 			CpuPool::new (
-				repository_config.max_threads * 2);
+				repository_config.max_threads + 1);
 
 		// create storage manager
 
