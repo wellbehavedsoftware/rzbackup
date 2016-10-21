@@ -1,0 +1,1 @@
+../../../shared/misc/protobuf.rs
