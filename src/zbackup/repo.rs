@@ -639,8 +639,30 @@ impl Repository {
 		if backup_instruction.has_chunk_to_emit ()
 		&& backup_instruction.has_bytes_to_emit () {
 
-			futures::failed::<BoxFuture <ChunkData, String>, String> (
-				"Instruction with both chunk and bytes".to_string ()
+			let chunk_id =
+				to_array (
+					backup_instruction.get_chunk_to_emit ());
+
+			let backup_instruction_bytes_to_emit =
+				backup_instruction.get_bytes_to_emit ().to_vec ();
+
+			self.get_chunk_async_async (
+				chunk_id,
+			).map (
+				move |chunk_data_future|
+
+				chunk_data_future.map (
+					move |chunk_data|
+
+					Arc::new (
+						chunk_data.iter ().map (
+							move |& value| value
+						).chain (
+							backup_instruction_bytes_to_emit.into_iter ()
+						).collect ())
+
+				).boxed ()
+
 			).boxed ()
 
 		} else if backup_instruction.has_chunk_to_emit () {
