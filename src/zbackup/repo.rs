@@ -325,7 +325,7 @@ impl Repository {
 
 		// start tasks to load each index
 
-		let mut index_futures: Vec <IndexLoadResult> =
+		let mut index_result_futures: Vec <IndexLoadResult> =
 			Vec::new ();
 
 		for dir_entry_or_error in try! (
@@ -350,7 +350,7 @@ impl Repository {
 			let self_clone =
 				self.clone ();
 
-			index_futures.push (
+			index_result_futures.push (
 				self.cpu_pool.spawn_fn (
 					move || {
 
@@ -409,28 +409,36 @@ impl Repository {
 		// construct index as they complete
 
 		let mut count: u64 = 0;
+		let mut error_count: u64 = 0;
 
 		let mut master_index: MasterIndex =
 			HashMap::new ();
 
-		for index_future in index_futures {
+		for index_result_future in index_result_futures {
 
-			let index_entries =
-				try! (
-					index_future.wait ());
+			if let Ok (index_entries) =
+				index_result_future.wait () {
 
-			for index_entry in index_entries {
+				for index_entry in index_entries {
 
-				master_index.insert (
+					master_index.insert (
 
-					index_entry.chunk_id,
+						index_entry.chunk_id,
 
-					Arc::new (MasterIndexEntryData {
-						bundle_id: index_entry.bundle_id,
-						size: index_entry.size,
-					}),
+						Arc::new (MasterIndexEntryData {
+							bundle_id: index_entry.bundle_id,
+							size: index_entry.size,
+						}),
 
-				);
+					);
+
+				}
+
+				count += 1;
+
+			} else {
+
+				error_count += 1;
 
 			}
 
@@ -439,12 +447,18 @@ impl Repository {
 					".");
 			}
 
-			count += 1;
-
 		}
 
 		stderr! (
 			"\n");
+
+		if error_count > 0 {
+
+			stderrln! (
+				"{} index files not loaded due to errors",
+				error_count);
+
+		}
 
 		// store the result and return
 
