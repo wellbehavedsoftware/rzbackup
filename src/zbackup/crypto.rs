@@ -34,18 +34,18 @@ type DecryptorType =
 pub struct CryptoReader {
 
 	input: File,
-	eof: bool,
 
 	decryptor: DecryptorType,
 
 	ciphertext_buffer: [u8; BUFFER_SIZE],
-	plaintext_buffer: [u8; BUFFER_SIZE],
-
 	ciphertext_start: usize,
 	ciphertext_end: usize,
+	ciphertext_eof: bool,
 
+	plaintext_buffer: [u8; BUFFER_SIZE],
 	plaintext_start: usize,
 	plaintext_end: usize,
+	plaintext_eof: bool,
 
 }
 
@@ -86,17 +86,18 @@ impl CryptoReader {
 		Ok (CryptoReader {
 
 			input: file,
-			eof: false,
 
 			decryptor: decryptor,
 
 			ciphertext_buffer: [0u8; BUFFER_SIZE],
 			ciphertext_start: 0,
 			ciphertext_end: 0,
+			ciphertext_eof: false,
 
 			plaintext_buffer: [0u8; BUFFER_SIZE],
 			plaintext_start: 0,
 			plaintext_end: 0,
+			plaintext_eof: false,
 
 		})
 
@@ -107,7 +108,7 @@ impl CryptoReader {
 	) -> io::Result <()> {
 
 		assert! (
-			! self.eof);
+			! self.plaintext_eof);
 
 		assert! (
 			self.plaintext_start == self.plaintext_end);
@@ -115,11 +116,20 @@ impl CryptoReader {
 		self.plaintext_start = 0;
 		self.plaintext_end = 0;
 
-		while ! self.eof {
+		loop {
 
 			// read in some more data
 
-			if self.ciphertext_start == self.ciphertext_end {
+			if ! self.ciphertext_eof
+			&& self.ciphertext_start == self.ciphertext_end {
+
+/*
+stderrln! (
+	"READ {} {} {}",
+	self.ciphertext_start,
+	self.ciphertext_end,
+	self.ciphertext_eof);
+*/
 
 				self.ciphertext_start = 0;
 
@@ -129,18 +139,28 @@ impl CryptoReader {
 							& mut self.ciphertext_buffer));
 
 				if self.ciphertext_end == 0 {
-					self.eof = true;
+					self.ciphertext_eof = true;
 				}
 
 			}
 
 			// decrypt the data in the buffer
 
+/*
+stderrln! (
+	"DECRYPT {} {} {}",
+	self.ciphertext_start,
+	self.ciphertext_end,
+	self.ciphertext_eof);
+*/
+
 			let mut read_buffer =
 				RefReadBuffer::new (
 					& mut self.ciphertext_buffer [
-						self.ciphertext_start ..
-						self.ciphertext_end]);
+						self.ciphertext_start
+					..
+						self.ciphertext_end
+					]);
 
 			let mut write_buffer =
 				RefWriteBuffer::new (
@@ -153,7 +173,7 @@ impl CryptoReader {
 				self.decryptor.decrypt (
 					& mut read_buffer,
 					& mut write_buffer,
-					self.eof,
+					self.ciphertext_eof,
 
 				).map_err (
 					|_|
@@ -172,6 +192,10 @@ impl CryptoReader {
 			self.plaintext_end +=
 				write_buffer.position ();
 
+			if write_buffer.position () == 0 {
+				break;
+			}
+
 			match decrypt_result {
 
 				BufferResult::BufferUnderflow =>
@@ -182,6 +206,24 @@ impl CryptoReader {
 
 			};
 
+		}
+
+/*
+stderrln! (
+	"CIPHER {} {} {}",
+	self.ciphertext_start,
+	self.ciphertext_end,
+	self.ciphertext_eof);
+
+stderrln! (
+	"PLAIN {} {} {}",
+	self.plaintext_start,
+	self.plaintext_end,
+	self.plaintext_eof);
+*/
+
+		if self.plaintext_start == self.plaintext_end {
+			self.plaintext_eof = true;
 		}
 
 		Ok (())
@@ -202,8 +244,13 @@ impl Read for CryptoReader {
 
 		// loop to fill buffer while decrypting
 
-		while ! (self.eof && self.plaintext_start == self.plaintext_end)
-		&& total_bytes_read < buffer.len () {
+		while (
+			! (
+				self.plaintext_eof
+				&& self.plaintext_start == self.plaintext_end
+			)
+			&& total_bytes_read < buffer.len ()
+		) {
 
 			// read more data if appropriate
 

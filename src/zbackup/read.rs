@@ -30,24 +30,13 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 		CodedInputStream::new (
 			& mut input);
 
-	// read header
+	// read file header
 
-	let header_length =
+	let file_header: proto::FileHeader =
 		try! (
-			protobuf_result (
-				coded_input_stream.read_raw_varint32 ()));
-
-	let header_old_limit =
-		try! (
-			protobuf_result (
-				coded_input_stream.push_limit (
-					header_length)));
-
-	let file_header =
-		try! (
-			protobuf_result (
-				protobuf::core::parse_from::<proto::FileHeader> (
-					& mut coded_input_stream)));
+			read_message (
+				& mut coded_input_stream,
+				|| "file header".to_string ()));
 
 	if file_header.get_version () != 1 {
 
@@ -57,30 +46,15 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 
 	}
 
-	coded_input_stream.pop_limit (
-		header_old_limit);
-
 	// read storage info
 
-	let storage_info_length =
+	let storage_info: proto::StorageInfo =
 		try! (
-			protobuf_result (
-				coded_input_stream.read_raw_varint32 ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "storage info".to_string ()));
 
-	let storage_info_old_limit =
-		try! (
-			protobuf_result (
-				coded_input_stream.push_limit (
-					storage_info_length)));
-
-	let storage_info =
-		try! (
-			protobuf_result (
-				protobuf::core::parse_from::<proto::StorageInfo> (
-					& mut coded_input_stream)));
-
-	coded_input_stream.pop_limit (
-		storage_info_old_limit);
+	// return
 
 	Ok (storage_info)
 
@@ -104,24 +78,13 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 		CodedInputStream::new (
 			& mut input);
 
-	// read header
+	// read file header
 
-	let header_length =
+	let file_header: proto::FileHeader =
 		try! (
-			protobuf_result (
-				coded_input_stream.read_raw_varint32 ()));
-
-	let header_old_limit =
-		try! (
-			protobuf_result (
-				coded_input_stream.push_limit (
-					header_length)));
-
-	let file_header =
-		try! (
-			protobuf_result (
-				protobuf::core::parse_from::<proto::FileHeader> (
-					& mut coded_input_stream)));
+			read_message (
+				& mut coded_input_stream,
+				|| "file header".to_string ()));
 
 	if file_header.get_version () != 1 {
 
@@ -131,30 +94,15 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 
 	}
 
-	coded_input_stream.pop_limit (
-		header_old_limit);
-
 	// read backup info
 
-	let backup_info_length =
+	let backup_info: proto::BackupInfo =
 		try! (
-			protobuf_result (
-				coded_input_stream.read_raw_varint32 ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "backup info".to_string ()));
 
-	let backup_info_old_limit =
-		try! (
-			protobuf_result (
-				coded_input_stream.push_limit (
-					backup_info_length)));
-
-	let backup_info =
-		try! (
-			protobuf_result (
-				protobuf::core::parse_from::<proto::BackupInfo> (
-					& mut coded_input_stream)));
-
-	coded_input_stream.pop_limit (
-		backup_info_old_limit);
+	// return
 
 	Ok (backup_info)
 
@@ -172,33 +120,23 @@ pub fn read_index <PathRef: AsRef <Path>> (
 
 	let mut input =
 		try! (
-			io_result (
+			io_result_with_prefix (
+				"Error opening file: ",
 				open_file_with_crypto (
 					path,
 					key)));
 
 	let mut coded_input_stream =
 		CodedInputStream::new (
-			&mut input);
+			& mut input);
 
 	// read header
 
-	let header_length =
+	let file_header: proto::FileHeader =
 		try! (
-			protobuf_result (
-				coded_input_stream.read_raw_varint32 ()));
-
-	let header_old_limit =
-		try! (
-			protobuf_result (
-				coded_input_stream.push_limit (
-					header_length)));
-
-	let file_header =
-		try! (
-			protobuf_result (
-				protobuf::core::parse_from::<proto::FileHeader> (
-					& mut coded_input_stream)));
+			read_message (
+				& mut coded_input_stream,
+				|| "file header".to_string ()));
 
 	if file_header.get_version () != 1 {
 
@@ -208,62 +146,35 @@ pub fn read_index <PathRef: AsRef <Path>> (
 
 	}
 
-	coded_input_stream.pop_limit (
-		header_old_limit);
+	let mut bundle_info_index = 0;
 
 	loop {
 
-		// read index bundle header
-
-		let index_bundle_header_length =
+		let index_bundle_header: proto::IndexBundleHeader =
 			try! (
-				protobuf_result (
-					coded_input_stream.read_raw_varint32 ()));
-
-		let index_bundle_header_old_limit =
-			try! (
-				protobuf_result (
-					coded_input_stream.push_limit (
-						index_bundle_header_length)));
-
-		let index_bundle_header =
-			try! (
-				protobuf_result (
-					protobuf::core::parse_from::<proto::IndexBundleHeader> (
-						& mut coded_input_stream)));
-
-		coded_input_stream.pop_limit (
-			index_bundle_header_old_limit);
+				read_message (
+					& mut coded_input_stream,
+					|| format! (
+						"index bundle header {}",
+						bundle_info_index)));
 
 		if ! index_bundle_header.has_id () {
 			break;
 		}
 
-		// read bundle info
-
-		let bundle_info_length =
+		let bundle_info: proto::BundleInfo =
 			try! (
-				protobuf_result (
-					coded_input_stream.read_raw_varint32 ()));
-
-		let bundle_info_old_limit =
-			try! (
-				protobuf_result (
-					coded_input_stream.push_limit (
-						bundle_info_length)));
-
-		let bundle_info =
-			try! (
-				protobuf_result (
-					protobuf::core::parse_from::<proto::BundleInfo> (
-						& mut coded_input_stream)));
-
-		coded_input_stream.pop_limit (
-			bundle_info_old_limit);
+				read_message (
+					& mut coded_input_stream,
+					|| format! (
+						"bundle info {}",
+						bundle_info_index)));
 
 		index_entries.push ( (
 			index_bundle_header,
 			bundle_info) );
+
+		bundle_info_index += 1;
 
 	}
 
@@ -293,60 +204,27 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 		let mut coded_input_stream =
 			CodedInputStream::from_buffered_reader (
-				&mut buf_input);
+				& mut buf_input);
 
-		// read header
-
-		let header_length =
+		let file_header: proto::FileHeader =
 			try! (
-				protobuf_result (
-					coded_input_stream.read_raw_varint32 ()));
-
-		let header_old_limit =
-			try! (
-				protobuf_result (
-					coded_input_stream.push_limit (
-						header_length)));
-
-		let file_header =
-			try! (
-				protobuf_result (
-					protobuf::core::parse_from::<proto::FileHeader> (
-						&mut coded_input_stream)));
+				read_message (
+					& mut coded_input_stream,
+					|| "file header".to_string ()));
 
 		if file_header.get_version () != 1 {
 
-			return Err (
-				format! (
-					"Unsupported backup version {}",
-					file_header.get_version ()));
+			panic! (
+				"Unsupported backup version {}",
+				file_header.get_version ());
 
 		}
 
-		coded_input_stream.pop_limit (
-			header_old_limit);
-
-		// read bundle infos
-
-		let bundle_info_length =
+		let bundle_info: proto::BundleInfo =
 			try! (
-				protobuf_result (
-					coded_input_stream.read_raw_varint32 ()));
-
-		let bundle_info_old_limit =
-			try! (
-				protobuf_result (
-					coded_input_stream.push_limit (
-						bundle_info_length)));
-
-		let bundle_info =
-			try! (
-				protobuf_result (
-					protobuf::core::parse_from::<proto::BundleInfo> (
-						& mut coded_input_stream)));
-
-		coded_input_stream.pop_limit (
-			bundle_info_old_limit);
+				read_message (
+					& mut coded_input_stream,
+					|| "bundle info".to_owned ()));
 
 		bundle_info
 
@@ -394,6 +272,47 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 	}
 
 	Ok (chunks)
+
+}
+
+fn read_message <
+	Type: protobuf::MessageStatic,
+	NameFunction: Fn () -> String,
+> (
+	coded_input_stream: & mut CodedInputStream,
+	name_function: NameFunction,
+) -> Result <Type, String> {
+
+	let message_length =
+		try! (
+			protobuf_result_with_prefix (
+				format! (
+					"Error reading {} length: ",
+					name_function ()),
+				coded_input_stream.read_raw_varint32 ()));
+
+	let old_limit =
+		try! (
+			protobuf_result_with_prefix (
+				format! (
+					"Error preparing to read {}: ",
+					name_function ()),
+				coded_input_stream.push_limit (
+					message_length)));
+
+	let message =
+		try! (
+			protobuf_result_with_prefix (
+				format! (
+					"Error reading {}: ",
+					name_function ()),
+				protobuf::core::parse_from::<Type> (
+					coded_input_stream)));
+
+	coded_input_stream.pop_limit (
+		old_limit);
+
+	Ok (message)
 
 }
 

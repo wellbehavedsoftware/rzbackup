@@ -366,7 +366,8 @@ impl Repository {
 						|error|
 
 						format! (
-							"Error loading index: {}",
+							"Error loading index {}: {}",
+							index_name,
 							error)
 
 					)
@@ -411,34 +412,44 @@ impl Repository {
 		let mut count: u64 = 0;
 		let mut error_count: u64 = 0;
 
+		let mut errors: Vec <String> = Vec::new ();
+
 		let mut master_index: MasterIndex =
 			HashMap::new ();
 
 		for index_result_future in index_result_futures {
 
-			if let Ok (index_entries) =
-				index_result_future.wait () {
+			match index_result_future.wait () {
 
-				for index_entry in index_entries {
+				Ok (index_entries) => {
 
-					master_index.insert (
+					for index_entry in index_entries {
 
-						index_entry.chunk_id,
+						master_index.insert (
 
-						Arc::new (MasterIndexEntryData {
-							bundle_id: index_entry.bundle_id,
-							size: index_entry.size,
-						}),
+							index_entry.chunk_id,
 
-					);
+							Arc::new (MasterIndexEntryData {
+								bundle_id: index_entry.bundle_id,
+								size: index_entry.size,
+							}),
 
-				}
+						);
 
-				count += 1;
+					}
 
-			} else {
+					count += 1;
 
-				error_count += 1;
+				},
+
+				Err (error) => {
+
+					errors.push (
+						error);
+
+					error_count += 1;
+
+				},
 
 			}
 
@@ -453,6 +464,14 @@ impl Repository {
 			"\n");
 
 		if error_count > 0 {
+
+			for error in errors {
+
+				stderrln! (
+					"{}",
+					error);
+
+			}
 
 			stderrln! (
 				"{} index files not loaded due to errors",
@@ -854,11 +873,12 @@ impl Repository {
 
 					},
 
-					Err ((value, index, remaining_future)) => {
+					Err ((error, index, remaining_future)) => {
 
 						panic! (
-							"Future error index {}",
-							index);
+							"Future error index {}: {}",
+							index,
+							error);
 
 					},
 
