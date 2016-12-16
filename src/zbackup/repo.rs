@@ -808,7 +808,7 @@ impl Repository {
 				&& future_chunk_job.is_some ()
 			) {
 
-				let (value, index, remaining_future) = match
+				let value = match
 					futures::select_all (
 
 					vec! [
@@ -818,41 +818,51 @@ impl Repository {
 
 				).wait () {
 
-					Ok (tuple) =>
-						tuple,
+					Ok ((value, index, remaining_future)) => {
 
-					Err (_error_tuple) =>
-						panic! ("ERR1"),
+						if index == 0 {
+
+							future_chunk_job = Some (
+
+								remaining_future.into_iter ()
+									.next ()
+									.unwrap ()
+									.boxed ()
+
+							);
+
+							current_chunk_job = None;
+
+							value
+
+						} else {
+
+							current_chunk_job = Some (
+
+								remaining_future.into_iter ()
+									.next ()
+									.unwrap ()
+									.boxed ()
+
+							);
+
+							future_chunk_job = None;
+
+							value
+
+						}
+
+					},
+
+					Err ((value, index, remaining_future)) => {
+
+						panic! (
+							"Future error index {}",
+							index);
+
+					},
 
 				};
-
-				if index == 0 {
-
-					future_chunk_job = Some (
-
-						remaining_future.into_iter ()
-							.next ()
-							.unwrap ()
-							.boxed ()
-
-					);
-
-					current_chunk_job = None;
-
-				} else {
-
-					current_chunk_job = Some (
-
-						remaining_future.into_iter ()
-							.next ()
-							.unwrap ()
-							.boxed ()
-
-					);
-
-					future_chunk_job = None;
-
-				}
 
 				completed_job_target =
 					value;
