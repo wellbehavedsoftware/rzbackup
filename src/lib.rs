@@ -13,12 +13,15 @@
 //! There is also a `RandomAccess` class which implements `Seek` and `Read`, and
 //! can be constructed from a `Repository` and the name of a backup.
 
+#![ allow (unused_parens) ]
+
 extern crate crypto;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate libc;
 extern crate lru_cache;
 extern crate minilzo;
+extern crate output;
 extern crate protobuf;
 extern crate rustc_serialize;
 

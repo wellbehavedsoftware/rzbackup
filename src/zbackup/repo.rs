@@ -2,20 +2,6 @@
 
 extern crate num_cpus;
 
-use futures;
-use futures::BoxFuture;
-use futures::Complete;
-use futures::Future;
-
-use futures_cpupool::CpuPool;
-
-use lru_cache::LruCache;
-
-use protobuf;
-use protobuf::stream::CodedInputStream;
-
-use rustc_serialize::hex::ToHex;
-
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fs;
@@ -25,6 +11,22 @@ use std::io::Write;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::Mutex;
+
+use futures;
+use futures::BoxFuture;
+use futures::Complete;
+use futures::Future;
+
+use futures_cpupool::CpuPool;
+
+use lru_cache::LruCache;
+
+use output::Output;
+
+use protobuf;
+use protobuf::stream::CodedInputStream;
+
+use rustc_serialize::hex::ToHex;
 
 use misc::*;
 
@@ -135,6 +137,7 @@ impl Repository {
 	/// key using the password, if provided.
 
 	pub fn open (
+		output: & Output,
 		repository_config: RepositoryConfig,
 		repository_path: & str,
 		password_file_path: Option <& str>,
@@ -142,9 +145,10 @@ impl Repository {
 
 		// load info file
 
-		stderrln! (
-			"Loading repository {}",
-			repository_path);
+		output.message_format (
+			format_args! (
+				"Loading repository {}",
+				repository_path));
 
 		let storage_info =
 			try! (
@@ -273,6 +277,7 @@ impl Repository {
 
 	pub fn load_indexes (
 		& self,
+		output: & Output,
 	) -> Result <(), String> {
 
 		let mut self_state =
@@ -283,7 +288,8 @@ impl Repository {
 		}
 
 		self.load_indexes_real (
-			self_state.deref_mut ())
+			self_state.deref_mut (),
+			output)
 
 	}
 
@@ -293,19 +299,22 @@ impl Repository {
 
 	pub fn reload_indexes (
 		& self,
+		output: & Output,
 	) -> Result <(), String> {
 
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
 		self.load_indexes_real (
-			self_state.deref_mut ())
+			self_state.deref_mut (),
+			output)
 
 	}
 
 	fn load_indexes_real (
 		& self,
 		self_state: & mut RepositoryState,
+		output: & Output,
 	) -> Result <(), String> {
 
 		struct IndexEntryData {
@@ -320,7 +329,7 @@ impl Repository {
 				String,
 			>;
 
-		stderr! (
+		output.status (
 			"Loading indexes");
 
 		// start tasks to load each index
@@ -407,12 +416,13 @@ impl Repository {
 
 		}
 
+		let num_indexes =
+			index_result_futures.len () as u64;
+
 		// construct index as they complete
 
 		let mut count: u64 = 0;
 		let mut error_count: u64 = 0;
-
-		let mut errors: Vec <String> = Vec::new ();
 
 		let mut master_index: MasterIndex =
 			HashMap::new ();
@@ -444,7 +454,7 @@ impl Repository {
 
 				Err (error) => {
 
-					errors.push (
+					output.message (
 						error);
 
 					error_count += 1;
@@ -454,28 +464,23 @@ impl Repository {
 			}
 
 			if count & 0x3f == 0x3f {
-				stderr! (
-					".");
+
+				output.status_progress (
+					count as u64,
+					num_indexes as u64);
+
 			}
 
 		}
 
-		stderr! (
-			"\n");
+		output.status_done ();
 
 		if error_count > 0 {
 
-			for error in errors {
-
-				stderrln! (
-					"{}",
-					error);
-
-			}
-
-			stderrln! (
-				"{} index files not loaded due to errors",
-				error_count);
+			output.message_format (
+				format_args! (
+					"{} index files not loaded due to errors",
+					error_count));
 
 		}
 
@@ -495,17 +500,20 @@ impl Repository {
 
 	pub fn read_and_expand_backup (
 		& self,
+		output: & Output,
 		backup_name: & str,
 	) -> Result <Vec <u8>, String> {
 
 		try! (
-			self.load_indexes ());
+			self.load_indexes (
+				output));
 
 		// load backup
 
-		stderr! (
-			"Loading backup {}",
-			backup_name);
+		output.status_format (
+			format_args! (
+				"Loading backup {}",
+				backup_name));
 
 		let backup_info =
 			try! (
@@ -517,8 +525,11 @@ impl Repository {
 					self.data.encryption_key,
 				).or_else (
 					|error| {
-						stderrln! ("");
+
+						output.status_done ();
+
 						Err (error)
+
 					}
 				)
 			);
@@ -541,7 +552,7 @@ impl Repository {
 					& mut temp_output,
 					& |count| {
 						if count & 0xf == 0xf {
-							stderr! (".");
+							output.status_tick ();
 						}
 					}));
 
@@ -551,8 +562,7 @@ impl Repository {
 
 		}
 
-		stderr! (
-			"\n");
+		output.status_done ();
 
 		Ok (input.into_inner ())
 
@@ -563,36 +573,36 @@ impl Repository {
 
 	pub fn restore (
 		& self,
+		output: & Output,
 		backup_name: & str,
-		output: & mut Write,
+		target: & mut Write,
 	) -> Result <(), String> {
 
 		let mut input =
 			Cursor::new (
 				try! (
 					self.read_and_expand_backup (
+						output,
 						backup_name)));
 
-		// restore backup
+		output.status_format (
+			format_args! (
+				"Restoring {}",
+				backup_name));
 
-		stderr! (
-			"Restoring backup");
+		// restore backup
 
 		try! (
 			self.follow_instructions (
 				& mut input,
-				output,
+				target,
 				& |count| {
-					if count & 0x1ff == 0x1ff {
-						stderr! (".");
+					if count & 0x7f == 0x00 {
+						output.status_tick ();
 					}
 				}));
 
-		stderr! (
-			"\n");
-
-		stderrln! (
-			"Restore complete");
+		output.status_done ();
 
 		Ok (())
 
@@ -601,17 +611,20 @@ impl Repository {
 	#[ doc (hidden) ]
 	pub fn restore_test (
 		& self,
+		output: & Output,
 		backup_name: & str,
-		output: & mut Write,
+		target: & mut Write,
 	) -> Result <(), String> {
 
-		stderr! (
-			"Loading backup {}",
-			backup_name);
+		output.status_format (
+			format_args! (
+				"Restoring {}",
+				backup_name));
 
 		let mut input =
 			try! (
 				RandomAccess::new (
+					output,
 					self,
 					backup_name));
 
@@ -619,9 +632,6 @@ impl Repository {
 			vec! [0u8; BUFFER_SIZE];
 
 		// restore backup
-
-		stderr! (
-			"Restoring backup");
 
 		loop {
 
@@ -637,14 +647,13 @@ impl Repository {
 
 			try! (
 				io_result (
-					output.write (
+					target.write (
 						& buffer [
 							0 .. bytes_read ])));
 
 		}
 
-		stderrln! (
-			"Restore complete");
+		output.status_done ();
 
 		Ok (())
 
@@ -719,7 +728,7 @@ impl Repository {
 	pub fn follow_instructions (
 		& self,
 		input: & mut Read,
-		output: & mut Write,
+		target: & mut Write,
 		progress: & Fn (u64),
 	) -> Result <(), String> {
 
@@ -873,7 +882,7 @@ impl Repository {
 
 					},
 
-					Err ((error, index, remaining_future)) => {
+					Err ((error, index, _)) => {
 
 						panic! (
 							"Future error index {}: {}",
@@ -916,7 +925,7 @@ impl Repository {
 					try! (
 						io_result (
 
-						output.write (
+						target.write (
 							& chunk_data)
 
 					));
@@ -1008,20 +1017,10 @@ impl Repository {
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
-		// load indexes if they aren't already
-
 		if self_state.master_index.is_none () {
 
-			match self.load_indexes () {
-
-				Ok (_) => (),
-
-				Err (error) =>
-					return futures::failed (
-						error,
-					).boxed (),
-
-			}
+			panic! (
+				"Must load indexes before getting chunks");
 
 		}
 
@@ -1494,8 +1493,8 @@ impl Repository {
 
 		if self_state.master_index.is_none () {
 
-			try! (
-				self.load_indexes ());
+			panic! (
+				"Must load indexes before getting index entries");
 
 		}
 
@@ -1526,10 +1525,12 @@ impl Repository {
 
 	pub fn open_backup (
 		& self,
+		output: & Output,
 		backup_name: & str,
 	) -> Result <RandomAccess, String> {
 
 		RandomAccess::new (
+			output,
 			self,
 			backup_name)
 

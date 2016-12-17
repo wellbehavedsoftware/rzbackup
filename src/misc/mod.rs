@@ -1,12 +1,8 @@
-#[ macro_use] 
-mod stderr;
-
 mod io;
 mod protobuf;
 
 pub use self::io::*;
 pub use self::protobuf::*;
-pub use self::stderr::*;
 
 pub fn to_array (
 	slice: & [u8],

@@ -1,6 +1,7 @@
 #![ allow (unused_parens) ]
 
 extern crate num_cpus;
+extern crate output;
 extern crate rzbackup;
 
 #[ macro_use ]
@@ -66,6 +67,9 @@ fn main () {
 fn main_real (
 ) -> i32 {
 
+	let output =
+		output::open ();
+
 	let default_argument_string_values =
 		build_default_argument_string_values ();
 
@@ -97,6 +101,7 @@ fn main_real (
 	let repository = match (
 
 		Repository::open (
+			& output,
 			repository_config,
 			repository_path,
 			password_file_path,
@@ -109,9 +114,10 @@ fn main_real (
 
 		Err (error) => {
 
-			println! (
-				"Error opening repository: {}",
-				error);
+			output.message_format (
+				format_args! (
+					"Error opening repository: {}",
+					error));
 
 			return 1;
 
@@ -119,7 +125,7 @@ fn main_real (
 
 	};
 
-	println! (
+	output.message (
 		"RZBackup startup complete");
 
 	match rzbackup::run_server (
@@ -131,9 +137,10 @@ fn main_real (
 
 		Err (error) => {
 
-			println! (
-				"RZBackup server encountered error: {}",
-				error);
+			output.message_format (
+				format_args! (
+					"RZBackup server encountered error: {}",
+					error));
 
 			return 1;
 

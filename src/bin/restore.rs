@@ -1,4 +1,4 @@
-#[ macro_use ]
+extern crate output;
 extern crate rzbackup;
 
 use std::env;
@@ -18,14 +18,18 @@ fn main () {
 fn main_real (
 ) -> i32 {
 
+	let output =
+		output::open ();
+
 	let arguments: Vec <String> =
 		env::args ().collect ();
 
 	if arguments.len () != 4 {
 
-		println! (
-			"Syntax: {} REPOSITORY PASSWORD-FILE BACKUP",
-			arguments [0]);
+		output.message_format (
+			format_args! (
+				"Syntax: {} REPOSITORY PASSWORD-FILE BACKUP",
+				arguments [0]));
 
 		return 1;
 
@@ -42,6 +46,7 @@ fn main_real (
 
 	let repository =
 		match Repository::open (
+			& output,
 			Repository::default_config (),
 			repository_path,
 			Some (password_file_path)) {
@@ -51,9 +56,10 @@ fn main_real (
 
 		Err (error) => {
 
-			println! (
-				"Error opening repository: {}",
-				error);
+			output.message_format (
+				format_args! (
+					"Error opening repository: {}",
+					error));
 
 			return 1;
 
@@ -68,6 +74,7 @@ fn main_real (
 		stdout_value.lock ();
 
 	match repository.restore (
+		& output,
 		backup_name,
 		& mut stdout_lock) {
 
@@ -79,9 +86,10 @@ fn main_real (
 
 		Err (error) => {
 
-			stderrln! (
-				"Error performing restore: {}",
-				error);
+			output.message_format (
+				format_args! (
+					"Error performing restore: {}",
+					error));
 
 			return 1;
 

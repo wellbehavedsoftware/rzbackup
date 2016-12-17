@@ -1,8 +1,3 @@
-use protobuf;
-use protobuf::stream::CodedInputStream;
-
-use rustc_serialize::hex::ToHex;
-
 use std::cmp;
 use std::io;
 use std::io::Cursor;
@@ -11,6 +6,13 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
 use std::sync::Arc;
+
+use output::Output;
+
+use protobuf;
+use protobuf::stream::CodedInputStream;
+
+use rustc_serialize::hex::ToHex;
 
 use ::misc::*;
 
@@ -51,6 +53,7 @@ pub struct RandomAccess <'a> {
 impl <'a> RandomAccess <'a> {
 
 	pub fn new (
+		output: & Output,
 		repo: & 'a Repository,
 		backup_name: & str,
 	) -> Result <RandomAccess <'a>, String> {
@@ -59,6 +62,7 @@ impl <'a> RandomAccess <'a> {
 			Cursor::new (
 				try! (
 					repo.read_and_expand_backup (
+						output,
 						backup_name)));
 
 		let mut coded_input_stream =

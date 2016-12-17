@@ -254,33 +254,27 @@ impl StorageManager {
 			if ! in_filesystem_cache {
 
 				let mut output =
-					try! (
-
 					File::create (
 						& entry_path,
-					).map_err (
+					).unwrap_or_else (
 						|error|
 
-						format! (
+						panic! (
 							"Unable to create {}: {}",
 							& entry_path,
 							error.description ())
-					)
 
-				);
+					);
 
-				try! (
+				output.write (
+					& stored_data,
+				).unwrap_or_else (
+					|error|
 
-					output.write (
-						& stored_data,
-					).map_err (
-						|error|
-
-						format! (
-							"Error writing to {}: {}",
-							entry_path,
-							error.description ())
-					)
+					panic! (
+						"Error writing to {}: {}",
+						entry_path,
+						error.description ())
 
 				);
 
@@ -617,26 +611,17 @@ impl Drop for FilesystemItem {
 		& mut self,
 	) {
 
-		match (
+		fs::remove_file (
+			self.path (),
+		).unwrap_or_else (
+			|error|
 
-			fs::remove_file (
-				self.path (),
-			)
+			panic! (
+				"Error removing storage item {}: {}",
+				self.key,
+				error.description ())
 
-		) {
-
-			Ok (_) => (),
-
-			Err (error) => {
-
-				stderrln! (
-					"Error removing storage item {}: {}",
-					self.key,
-					error.description ());
-
-			}
-
-		}
+		);
 
 	}
 

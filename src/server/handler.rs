@@ -4,6 +4,9 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::net::TcpStream;
 
+use output;
+use output::Output;
+
 use ::Repository;
 
 use ::misc::*;
@@ -89,6 +92,9 @@ fn handle_client_real (
 				""
 			};
 
+		let output =
+			output::pipe ();
+
 		if command == "exit" {
 
 			println! (
@@ -100,6 +106,7 @@ fn handle_client_real (
 
 			try! (
 				handle_reindex (
+					& output,
 					repository,
 					& stream));
 
@@ -107,6 +114,7 @@ fn handle_client_real (
 
 			try! (
 				handle_restore (
+					& output,
 					repository,
 					& stream,
 					rest));
@@ -127,11 +135,12 @@ fn handle_client_real (
 }
 
 fn handle_reindex (
+	output: & Output,
 	repository: & Repository,
 	stream: & TcpStream,
 ) -> Result <(), String> {
 
-	println! (
+	output.message (
 		"Will reindex");
 
 	let mut writer =
@@ -141,6 +150,7 @@ fn handle_reindex (
 	try! (
 
 		repository.reload_indexes (
+			output,
 		).map_err (
 			|error|
 
@@ -163,14 +173,16 @@ fn handle_reindex (
 }
 
 fn handle_restore (
+	output: & Output,
 	repository: & Repository,
 	stream: & TcpStream,
 	path: & str,
 ) -> Result <(), String> {
 
-	println! (
-		"Will restore: {}",
-		path);
+	output.message_format (
+		format_args! (
+			"Will restore: {}",
+			path));
 
 	let mut writer =
 		BufWriter::new (
@@ -184,6 +196,7 @@ fn handle_restore (
 
 	try! (
 		repository.restore (
+			output,
 			path,
 			& mut writer));
 

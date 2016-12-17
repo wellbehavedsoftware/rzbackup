@@ -1,4 +1,4 @@
-#[ macro_use ]
+extern crate output;
 extern crate rzbackup;
 
 use std::env;
@@ -10,14 +10,20 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::process;
 
+use output::Output;
+
 fn main () {
+
+	let output =
+		output::open ();
 
 	let arguments: Vec <String> =
 		env::args ().collect ();
 
 	if arguments.len () == 1 {
 
-		show_help ();
+		show_help (
+			& output);
 
 		process::exit (0);
 
@@ -32,16 +38,19 @@ fn main () {
 	if command_name == "reindex" {
 
 		reindex_command (
+			& output,
 			& command_arguments);
 
 	} else if command_name == "restore" {
 
 		restore_command (
+			& output,
 			& command_arguments);
 
 	} else {
 
 		exit_with_error_and_show_help (
+			& output,
 			& format! (
 				"Command not recognised: {}",
 				command_name));
@@ -51,21 +60,25 @@ fn main () {
 }
 
 fn reindex_command (
+	output: & Output,
 	arguments: & [String],
 ) {
 
 	if arguments.len () != 1 {
 
 		exit_with_error_and_show_help (
+			output,
 			"Invalid syntax");
 
 	}
 
 	let (server_hostname, server_port) =
 		parse_server_address (
+			output,
 			& arguments [0]);
 
 	match do_reindex (
+		output,
 		server_hostname,
 		server_port,
 	) {
@@ -76,6 +89,7 @@ fn reindex_command (
 		Err (error) => {
 
 			exit_with_error (
+				output,
 				& format! (
 					"Error performing reindex: {}",
 					error));
@@ -87,18 +101,21 @@ fn reindex_command (
 }
 
 fn restore_command (
+	output: & Output,
 	arguments: & [String],
 ) {
 
 	if arguments.len () != 2 {
 
 		exit_with_error_and_show_help (
+			output,
 			"Invalid syntax");
 
 	}
 
 	let (server_hostname, server_port) =
 		parse_server_address (
+			output,
 			& arguments [0]);
 
 	let backup_filename =
@@ -116,6 +133,7 @@ fn restore_command (
 		Err (error) => {
 
 			exit_with_error (
+				output,
 				& format! (
 					"Error performing restore: {}",
 					error));
@@ -127,6 +145,7 @@ fn restore_command (
 }
 
 fn do_reindex (
+	_output: & Output,
 	server_hostname: & str,
 	server_port: u16,
 ) -> Result <(), String> {
@@ -287,6 +306,7 @@ fn do_restore (
 }
 
 fn parse_server_address <'a> (
+	output: & Output,
 	server_address_string: & 'a str,
 ) -> (& 'a str, u16) {
 
@@ -296,6 +316,7 @@ fn parse_server_address <'a> (
 	if server_address_parts.len () != 2 {
 
 		exit_with_error_and_show_help (
+			output,
 			"Invalid server address");
 
 	}
@@ -312,6 +333,7 @@ fn parse_server_address <'a> (
 		Err (error) => {
 
 			exit_with_error_and_show_help (
+				output,
 				& format! (
 					"Invalid server address: {}",
 					error.description ()));
@@ -325,11 +347,11 @@ fn parse_server_address <'a> (
 }
 
 fn exit_with_error (
+	output: & Output,
 	error_message: & str,
 ) -> ! {
 
-	stderrln! (
-		"{}",
+	output.message (
 		error_message);
 
 	process::exit (1);
@@ -337,42 +359,47 @@ fn exit_with_error (
 }
 
 fn exit_with_error_and_show_help (
+	output: & Output,
 	error_message: & str,
 ) -> ! {
 
-	stderrln! (
+	output.message (
 		"");
 
-	stderrln! (
-		"{}",
+	output.message (
 		error_message);
 
-	show_help ();
+	show_help (
+		output);
 
 	process::exit (1);
 
 }
 
-fn show_help () {
+fn show_help (
+	output: & Output,
+) {
 
-	stderrln! (
+	output.message (
 		"");
 
-	stderrln! (
+	output.message (
 		"Syntax:");
 
-	stderrln! (
+	output.message (
 		"");
 
-	stderrln! (
-		"  {} reindex SERVER:PORT",
-		env::args ().next ().unwrap ());
+	output.message_format (
+		format_args! (
+			"  {} reindex SERVER:PORT",
+			env::args ().next ().unwrap ()));
 
-	stderrln! (
-		"  {} restore SERVER:PORT PATH",
-		env::args ().next ().unwrap ());
+	output.message_format (
+		format_args! (
+			"  {} restore SERVER:PORT PATH",
+			env::args ().next ().unwrap ()));
 
-	stderrln! (
+	output.message (
 		"");
 
 }
