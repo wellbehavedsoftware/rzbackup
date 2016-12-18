@@ -9,6 +9,8 @@ use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
 use std::ops::DerefMut;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -65,7 +67,7 @@ pub struct RepositoryConfig {
 
 struct RepositoryData {
 	config: RepositoryConfig,
-	path: String,
+	path: PathBuf,
 	storage_info: proto::StorageInfo,
 	encryption_key: Option <EncryptionKey>,
 }
@@ -136,26 +138,36 @@ impl Repository {
 	/// This will read the repositories info file, and decrypt the encryption
 	/// key using the password, if provided.
 
-	pub fn open (
+	pub fn open <
+		RepositoryPath: AsRef <Path>,
+		PasswordFilePath: AsRef <Path>,
+	> (
 		output: & Output,
 		repository_config: RepositoryConfig,
-		repository_path: & str,
-		password_file_path: Option <& str>,
+		repository_path: RepositoryPath,
+		password_file_path: Option <PasswordFilePath>,
 	) -> Result <Repository, String> {
+
+		let repository_path =
+			repository_path.as_ref ();
+
+		let password_file_path =
+			password_file_path.as_ref ();
 
 		// load info file
 
-		output.message_format (
+		output.status_format (
 			format_args! (
-				"Loading repository {}",
-				repository_path));
+				"Loading repository {} ...",
+				repository_path.to_string_lossy ()));
 
-		let storage_info =
-			try! (
-				read_storage_info (
-					& format! (
-						"{}/info",
-						repository_path)));
+		let storage_info = (
+
+			read_storage_info (
+				repository_path.join (
+					"info"))
+
+		) ?;
 
 		// decrypt encryption key with password
 
@@ -163,6 +175,8 @@ impl Repository {
 			if storage_info.has_encryption_key () {
 
 			if password_file_path.is_none () {
+
+				output.clear_status ();
 
 				return Err (
 					"Required password file not provided".to_string ());
@@ -177,15 +191,22 @@ impl Repository {
 				Some (key) =>
 					Some (key),
 
-				None =>
+				None => {
+
+					output.clear_status ();
+
 					return Err (
-						"Incorrect password".to_string ()),
+						"Incorrect password".to_string ());
+
+				},
 
 			}
 
 		} else {
 
 			if password_file_path.is_some () {
+
+				output.clear_status ();
 
 				return Err (
 					"Unnecessary password file provided".to_string ());
@@ -195,6 +216,8 @@ impl Repository {
 			None
 
 		};
+
+		output.status_done ();
 
 		// create thread pool
 
@@ -225,7 +248,7 @@ impl Repository {
 
 			config: repository_config,
 
-			path: repository_path.to_string (),
+			path: repository_path.to_owned (),
 			storage_info: storage_info,
 			encryption_key: encryption_key,
 
@@ -330,20 +353,21 @@ impl Repository {
 			>;
 
 		output.status (
-			"Loading indexes");
+			"Loading indexes ...");
 
 		// start tasks to load each index
 
 		let mut index_result_futures: Vec <IndexLoadResult> =
 			Vec::new ();
 
-		for dir_entry_or_error in try! (
+		for dir_entry_or_error in (
+
 			io_result (
 				fs::read_dir (
-					format! (
-						"{}/index",
-						self.data.path)))
-		) {
+					self.data.path.join (
+						"index")))
+
+		) ? {
 
 			let dir_entry =
 				try! (
@@ -363,25 +387,19 @@ impl Repository {
 				self.cpu_pool.spawn_fn (
 					move || {
 
-				let index = try! (
+				let index = (
 
-					read_index (
-						& format! (
-							"{}/index/{}",
-							self_clone.data.path,
+					string_result_with_prefix (
+						|| format! (
+							"Error loading index {}",
 							index_name),
-						self_clone.data.encryption_key,
-					).map_err (
-						|error|
+						read_index (
+							self_clone.data.path
+								.join ("index")
+								.join (& index_name),
+							self_clone.data.encryption_key))
 
-						format! (
-							"Error loading index {}: {}",
-							index_name,
-							error)
-
-					)
-
-				);
+				) ?;
 
 				let mut entries: Vec <IndexEntryData> =
 					Vec::new ();
@@ -394,14 +412,14 @@ impl Repository {
 							IndexEntryData {
 
 							chunk_id:
-								to_array (
+								to_array_24 (
 									chunk_record.get_id ()),
 
-							bundle_id: 
-								to_array (
+							bundle_id:
+								to_array_24 (
 									index_bundle_header.get_id ()),
 
-							size: 
+							size:
 								chunk_record.get_size () as u64,
 
 						});
@@ -512,27 +530,27 @@ impl Repository {
 
 		output.status_format (
 			format_args! (
-				"Loading backup {}",
+				"Loading backup {} ...",
 				backup_name));
 
-		let backup_info =
-			try! (
-				read_backup_file (
-					format! (
-						"{}/backups/{}",
-						& self.data.path,
-						backup_name),
-					self.data.encryption_key,
-				).or_else (
-					|error| {
+		let backup_info = (
 
-						output.status_done ();
+			read_backup_file (
+				self.data.path
+					.join ("backups")
+					.join (& backup_name [1 .. ]),
+				self.data.encryption_key,
+			).or_else (
+				|error| {
 
-						Err (error)
+					output.status_done ();
 
-					}
-				)
-			);
+					Err (error)
+
+				}
+			)
+
+		) ?;
 
 		// expand backup data
 
@@ -577,6 +595,20 @@ impl Repository {
 		backup_name: & str,
 		target: & mut Write,
 	) -> Result <(), String> {
+
+		if backup_name.is_empty () {
+
+			return Err (
+				"Backup name must not be empty".to_string ());
+
+		}
+
+		if backup_name.chars ().next ().unwrap () != '/' {
+
+			return Err (
+				"Backup name must begin with '/'".to_string ());
+
+		}
 
 		let mut input =
 			Cursor::new (
@@ -668,7 +700,7 @@ impl Repository {
 		&& backup_instruction.has_bytes_to_emit () {
 
 			let chunk_id =
-				to_array (
+				to_array_24 (
 					backup_instruction.get_chunk_to_emit ());
 
 			let backup_instruction_bytes_to_emit =
@@ -696,7 +728,7 @@ impl Repository {
 		} else if backup_instruction.has_chunk_to_emit () {
 
 			let chunk_id =
-				to_array (
+				to_array_24 (
 					backup_instruction.get_chunk_to_emit ());
 
 			self.get_chunk_async_async (
@@ -1256,11 +1288,10 @@ impl Repository {
 	) -> BoxFuture <ChunkData, String> {
 
 		let bundle_path =
-			format! (
-				"{}/bundles/{}/{}",
-				self.data.path,
-				& bundle_id.to_hex () [0 .. 2],
-				bundle_id.to_hex ());
+			self.data.path
+				.join ("bundles")
+				.join (& bundle_id.to_hex () [0 .. 2])
+				.join (bundle_id.to_hex ());
 
 		self_state.bundles_loading.insert (
 			bundle_id.clone (),
@@ -1311,9 +1342,7 @@ impl Repository {
 				self_clone.state.lock ().unwrap ();
 
 			let chunk_map =
-				chunk_map_result.unwrap_or (
-					Arc::new (
-						HashMap::new ()));
+				chunk_map_result ?;
 
 			for (chunk_id, chunk_data)
 			in chunk_map.iter () {

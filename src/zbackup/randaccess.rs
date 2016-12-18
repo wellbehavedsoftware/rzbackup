@@ -101,7 +101,7 @@ impl <'a> RandomAccess <'a> {
 			if backup_instruction.has_chunk_to_emit () {
 
 				let chunk_id =
-					to_array (
+					to_array_24 (
 						backup_instruction.get_chunk_to_emit ());
 
 				let index_entry =
@@ -114,7 +114,7 @@ impl <'a> RandomAccess <'a> {
 
 					content:
 						InstructionRefContent::Chunk (
-							to_array (
+							to_array_24 (
 								backup_instruction.get_chunk_to_emit ())),
 
 					start:

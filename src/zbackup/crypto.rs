@@ -58,19 +58,12 @@ impl CryptoReader {
 
 		// open file
 
-		let mut file =
-			try! (
-				File::open (
-					path));
+		let file = (
 
-		// read first iv
+			File::open (
+				path)
 
-		let mut initialisation_vector: Vec <u8> =
-			vec! [0; IV_SIZE];
-
-		try! (
-			file.read_exact (
-				& mut initialisation_vector));
+		) ?;
 
 		// setup decryptor
 
@@ -79,7 +72,7 @@ impl CryptoReader {
 				AesSafe128Decryptor::new (
 					& encryption_key),
 				PkcsPadding,
-				initialisation_vector);
+				[0u8; KEY_SIZE].to_vec ());
 
 		// return
 
@@ -324,10 +317,15 @@ impl Read for CryptoReader {
 /// called automatically when constructing a `Repository`, but it is made public
 /// because it may be useful in some cases.
 
-pub fn decrypt_key (
-	password_file_path: & str,
+pub fn decrypt_key <
+	PasswordFilePath: AsRef <Path>,
+> (
+	password_file_path: PasswordFilePath,
 	encryption_key: & proto::EncryptionKeyInfo,
 ) -> Result <Option <[u8; KEY_SIZE]>, String> {
+
+	let password_file_path =
+		password_file_path.as_ref ();
 
 	// read password from file
 

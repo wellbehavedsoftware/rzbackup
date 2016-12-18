@@ -15,6 +15,9 @@
 
 #![ allow (unused_parens) ]
 
+extern crate adler32;
+extern crate byteorder;
+extern crate clap;
 extern crate crypto;
 extern crate futures;
 extern crate futures_cpupool;
@@ -27,7 +30,7 @@ extern crate rustc_serialize;
 
 #[ doc (hidden) ]
 #[ macro_use ]
-mod misc;
+pub mod misc;
 
 mod compress;
 mod server;

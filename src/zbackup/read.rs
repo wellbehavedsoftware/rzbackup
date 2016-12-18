@@ -1,15 +1,21 @@
-use protobuf;
-use protobuf::stream::CodedInputStream;
-
 use std::fs::File;
 use std::path::Path;
 use std::io;
+use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
+use std::iter;
+
+use adler32::RollingAdler32;
+
+use byteorder::LittleEndian;
+use byteorder::ReadBytesExt;
+
+use protobuf;
+use protobuf::stream::CodedInputStream;
 
 use misc::*;
 use compress::lzma;
-
 use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::proto;
@@ -18,41 +24,61 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 	path: PathRef,
 ) -> Result <proto::StorageInfo, String> {
 
+	let storage_info: proto::StorageInfo;
+
 	// open file
 
-	let mut input =
-		try! (
-			io_result (
-				File::open (
-					path)));
+	let source = try! (
 
-	let mut coded_input_stream =
-		CodedInputStream::new (
-			& mut input);
+		io_result (
+			File::open (
+				path))
 
-	// read file header
+	);
 
-	let file_header: proto::FileHeader =
-		try! (
-			read_message (
-				& mut coded_input_stream,
-				|| "file header".to_string ()));
+	let mut source =
+		AdlerRead::new (
+			Box::new (
+				BufReader::new (
+					source)));
 
-	if file_header.get_version () != 1 {
+	{
 
-		panic! (
-			"Unsupported backup version {}",
-			file_header.get_version ());
+		let mut coded_input_stream =
+			CodedInputStream::from_buffered_reader (
+				& mut source);
+
+		// read file header
+
+		let file_header: proto::FileHeader =
+			try! (
+				read_message (
+					& mut coded_input_stream,
+					|| "file header".to_string ()));
+
+		if file_header.get_version () != 1 {
+
+			panic! (
+				"Unsupported backup version {}",
+				file_header.get_version ());
+
+		}
+
+		// read storage info
+
+		storage_info =
+			try! (
+				read_message (
+					& mut coded_input_stream,
+					|| "storage info".to_string ()));
 
 	}
 
-	// read storage info
+	// verify checksum
 
-	let storage_info: proto::StorageInfo =
-		try! (
-			read_message (
-				& mut coded_input_stream,
-				|| "storage info".to_string ()));
+	try! (
+		verify_adler_and_eof (
+			source));
 
 	// return
 
@@ -65,42 +91,54 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <proto::BackupInfo, String> {
 
+	let backup_info: proto::BackupInfo;
+
 	// open file
 
-	let mut input =
+	let mut source =
 		try! (
 			io_result (
-				open_file_with_crypto (
+				open_file_with_crypto_and_adler (
 					path,
 					key)));
 
-	let mut coded_input_stream =
-		CodedInputStream::new (
-			& mut input);
+	{
 
-	// read file header
+		let mut coded_input_stream =
+			CodedInputStream::from_buffered_reader (
+				& mut source);
 
-	let file_header: proto::FileHeader =
-		try! (
-			read_message (
-				& mut coded_input_stream,
-				|| "file header".to_string ()));
+		// read file header
 
-	if file_header.get_version () != 1 {
+		let file_header: proto::FileHeader =
+			try! (
+				read_message (
+					& mut coded_input_stream,
+					|| "file header".to_string ()));
 
-		panic! (
-			"Unsupported backup version {}",
-			file_header.get_version ());
+		if file_header.get_version () != 1 {
+
+			panic! (
+				"Unsupported backup version {}",
+				file_header.get_version ());
+
+		}
+
+		// read backup info
+
+		backup_info =
+			try! (
+				read_message (
+					& mut coded_input_stream,
+					|| "backup info".to_string ()));
 
 	}
 
-	// read backup info
+	// verify checksum
 
-	let backup_info: proto::BackupInfo =
-		try! (
-			read_message (
-				& mut coded_input_stream,
-				|| "backup info".to_string ()));
+	try! (
+		verify_adler_and_eof (
+			source));
 
 	// return
 
@@ -118,93 +156,21 @@ pub fn read_index <PathRef: AsRef <Path>> (
 
 	// open file
 
-	let mut input =
+	let mut source =
 		try! (
 			io_result_with_prefix (
 				"Error opening file: ",
-				open_file_with_crypto (
+				open_file_with_crypto_and_adler (
 					path,
 					key)));
 
-	let mut coded_input_stream =
-		CodedInputStream::new (
-			& mut input);
-
-	// read header
-
-	let file_header: proto::FileHeader =
-		try! (
-			read_message (
-				& mut coded_input_stream,
-				|| "file header".to_string ()));
-
-	if file_header.get_version () != 1 {
-
-		panic! (
-			"Unsupported backup version {}",
-			file_header.get_version ());
-
-	}
-
-	let mut bundle_info_index = 0;
-
-	loop {
-
-		let index_bundle_header: proto::IndexBundleHeader =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| format! (
-						"index bundle header {}",
-						bundle_info_index)));
-
-		if ! index_bundle_header.has_id () {
-			break;
-		}
-
-		let bundle_info: proto::BundleInfo =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| format! (
-						"bundle info {}",
-						bundle_info_index)));
-
-		index_entries.push ( (
-			index_bundle_header,
-			bundle_info) );
-
-		bundle_info_index += 1;
-
-	}
-
-	Ok (index_entries)
-
-}
-
-pub fn read_bundle <PathRef: AsRef <Path>> (
-	path: PathRef,
-	key: Option <[u8; KEY_SIZE]>,
-) -> Result <Vec <([u8; 24], Vec <u8>)>, String> {
-
-	// open file
-
-	let input =
-		try! (
-			io_result (
-				open_file_with_crypto (
-					path,
-					key)));
-
-	let mut buf_input =
-		BufReader::new (
-			input);
-
-	let bundle_info = {
+	{
 
 		let mut coded_input_stream =
 			CodedInputStream::from_buffered_reader (
-				& mut buf_input);
+				& mut source);
+
+		// read header
 
 		let file_header: proto::FileHeader =
 			try! (
@@ -220,56 +186,169 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 		}
 
-		let bundle_info: proto::BundleInfo =
+		let mut bundle_info_index = 0;
+
+		loop {
+
+			let index_bundle_header: proto::IndexBundleHeader =
+				try! (
+					read_message (
+						& mut coded_input_stream,
+						|| format! (
+							"index bundle header {}",
+							bundle_info_index)));
+
+			if ! index_bundle_header.has_id () {
+				break;
+			}
+
+			let bundle_info: proto::BundleInfo =
+				try! (
+					read_message (
+						& mut coded_input_stream,
+						|| format! (
+							"bundle info {}",
+							bundle_info_index)));
+
+			index_entries.push ( (
+				index_bundle_header,
+				bundle_info) );
+
+			bundle_info_index += 1;
+
+		}
+
+	}
+
+	// verify checksum
+
+	try! (
+		verify_adler_and_eof (
+			source));
+
+	Ok (index_entries)
+
+}
+
+pub fn read_bundle <PathRef: AsRef <Path>> (
+	path: PathRef,
+	key: Option <[u8; KEY_SIZE]>,
+) -> Result <Vec <([u8; 24], Vec <u8>)>, String> {
+
+	let bundle_info: proto::BundleInfo;
+	let mut chunks: Vec <([u8; 24], Vec <u8>)>;
+
+	// open file
+
+	let mut source = try! (
+
+		io_result (
+			open_file_with_crypto_and_adler (
+				path,
+				key))
+
+	);
+
+	{
+
+		// read bundle info
+
+		let mut coded_input_stream =
+			CodedInputStream::from_buffered_reader (
+				& mut source);
+
+		let file_header: proto::FileHeader =
 			try! (
 				read_message (
 					& mut coded_input_stream,
-					|| "bundle info".to_owned ()));
+					|| "file header".to_string ()));
 
-		bundle_info
+		if file_header.get_version () != 1 {
 
-	};
+			panic! (
+				"Unsupported backup version {}",
+				file_header.get_version ());
 
-	// skip checksum TODO
+		}
 
-	let mut checksum_buffer: [u8; 4] =
-		[0u8; 4];
+		bundle_info = try! (
 
-	try! (
-		io_result (
-			buf_input.read_exact (
-				& mut checksum_buffer)));
-	
-	// decode compressed data
+			read_message (
+				& mut coded_input_stream,
+				|| "bundle info".to_owned ())
 
-	let mut chunks: Vec <([u8; 24], Vec <u8>)> =
-		vec! {};
-
-	let mut lzma_reader =
-		try! (
-			lzma::LzmaReader::new (
-				& mut buf_input));
-
-	// split into chunks
-
-	for chunk_record in bundle_info.get_chunk_record () {
-
-		let mut chunk_bytes: Vec <u8> =
-			vec! [0u8; chunk_record.get_size () as usize];
-
-		try! (
-			io_result (
-				lzma_reader.read_exact (
-					& mut chunk_bytes)));
-
-		chunks.push (
-			(
-				to_array (chunk_record.get_id ()),
-				chunk_bytes,
-			)
 		);
 
 	}
+
+	// verify checksum
+
+	try! (
+		verify_adler (
+			& mut source));
+
+	{
+
+		// decode compressed data
+
+		chunks = Vec::new ();
+
+		let mut lzma_reader =
+			try! (
+				lzma::LzmaReader::new (
+					& mut source));
+
+		// split into chunks
+
+		for chunk_record in bundle_info.get_chunk_record () {
+
+			let mut chunk_bytes: Vec <u8> =
+				vec! [0u8; chunk_record.get_size () as usize];
+
+			try! (
+				io_result (
+					lzma_reader.read_exact (
+						& mut chunk_bytes)));
+
+			chunks.push (
+				(
+					to_array_24 (chunk_record.get_id ()),
+					chunk_bytes,
+				)
+			);
+
+		}
+
+		// finish reading lzma stream, otherwise checksum may not match
+
+		{
+
+			let mut extra_data: Vec <u8> =
+				Vec::new ();
+
+			io_result (
+				lzma_reader.read_to_end (
+					& mut extra_data,
+				)
+			) ?;
+
+			if ! extra_data.is_empty () {
+
+				panic! (
+					"Got {} extra bytes",
+					extra_data.len ());
+
+			}
+
+		}
+
+	}
+
+	// verify checksum
+
+	try! (
+		verify_adler_and_eof (
+			source));
 
 	Ok (chunks)
 
@@ -316,27 +395,233 @@ fn read_message <
 
 }
 
-fn open_file_with_crypto <PathRef: AsRef <Path>> (
+fn open_file_with_crypto_and_adler <
+	PathRef: AsRef <Path>
+> (
 	path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
-) -> io::Result <Box <Read>> {
+) -> io::Result <AdlerRead> {
 
 	Ok (match key {
 
-		Some (key) =>
-			Box::new (
+		Some (key) => {
+
+			let mut crypto_reader =
 				try! (
 					CryptoReader::open (
 						path,
-						key))),
+						key));
+
+			let mut initialisation_vector =
+				[0u8; IV_SIZE];
+
+			try! (
+				crypto_reader.read_exact (
+					& mut initialisation_vector));
+
+			let mut adler_read =
+				AdlerRead::new (
+					Box::new (
+						BufReader::new (
+							crypto_reader)));
+
+			adler_read.update (
+				& initialisation_vector);
+
+			adler_read
+
+		},
 
 		None =>
-			Box::new (
-				try! (
-					File::open (
-						path))),
+			AdlerRead::new (
+				Box::new (
+					BufReader::new (
+
+			try! (
+				File::open (
+					path))
+
+		))),
 
 	})
+
+}
+
+fn verify_adler (
+	adler_read: & mut AdlerRead,
+) -> Result <(), String> {
+
+	// verify hash
+
+	let calculated_hash =
+		adler_read.hash ();
+
+	let expected_hash = try! (
+
+		io_result_with_prefix (
+			"Error reading adler32 checksum: ",
+			adler_read.read_u32::<LittleEndian> ())
+
+	);
+
+	if calculated_hash != expected_hash {
+
+		return Err (
+			format! (
+				"Adler32 hash calculated {} but expected {}, at position \
+				0x{:x}",
+				calculated_hash,
+				expected_hash,
+				adler_read.byte_count - 4));
+
+	}
+
+	// return ok
+
+	Ok (())
+
+}
+
+fn verify_adler_and_eof (
+	mut adler_read: AdlerRead,
+) -> Result <(), String> {
+
+	try! (
+		verify_adler (
+			& mut adler_read));
+
+	// verify end of file
+
+	let mut byte_buffer: [u8; 1] = [0u8; 1];
+
+	let bytes_read = try! (
+
+		io_result_with_prefix (
+			"Error checking for end of file: ",
+			adler_read.read (
+				& mut byte_buffer))
+
+	);
+
+	if bytes_read != 0 {
+
+		return Err (
+			format! (
+				"Extra data at end of file"));
+
+	}
+
+	// return ok
+
+	Ok (())
+
+}
+
+struct AdlerRead {
+	source: Box <BufRead>,
+	adler: RollingAdler32,
+	byte_count: usize,
+}
+
+impl AdlerRead {
+
+	fn new (
+		source: Box <BufRead>,
+	) -> AdlerRead {
+
+		AdlerRead {
+			source: source,
+			adler: RollingAdler32::new (),
+			byte_count: 0,
+		}
+
+	}
+
+	fn hash (
+		& self,
+	) -> u32 {
+
+		self.adler.hash ()
+
+	}
+
+	fn update (
+		& mut self,
+		data: & [u8],
+	) {
+
+		self.adler.update_buffer (
+			data);
+
+		self.byte_count +=
+			data.len ();
+
+	}
+
+}
+
+impl Read for AdlerRead {
+
+	fn read (
+		& mut self,
+		buffer: & mut [u8],
+	) -> Result <usize, io::Error> {
+
+		match self.source.read (
+			buffer) {
+
+			Ok (read_size) => {
+
+				self.adler.update_buffer (
+					& buffer [0 .. read_size]);
+
+				self.byte_count +=
+					read_size;
+
+				Ok (read_size)
+
+			},
+
+			Err (error) =>
+				Err (error),
+
+		}
+
+	}
+
+}
+
+impl BufRead for AdlerRead {
+
+	fn fill_buf (
+		& mut self,
+	) -> Result <& [u8], io::Error> {
+
+		self.source.fill_buf ()
+
+	}
+
+	fn consume (
+		& mut self,
+		amount: usize,
+	) {
+
+		let mut buffer: Vec <u8> =
+			iter::repeat (0u8)
+				.take (amount)
+				.collect ();
+
+		self.source.read_exact (
+			& mut buffer,
+		).unwrap ();
+
+		self.adler.update_buffer (
+			& buffer);
+
+		self.byte_count +=
+			amount;
+
+	}
 
 }
 

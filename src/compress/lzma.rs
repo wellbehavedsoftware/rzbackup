@@ -2,10 +2,9 @@ use libc::c_int;
 use libc::size_t;
 
 use std::io;
+use std::io::BufRead;
 use std::io::Read;
 use std::ptr;
-
-const READ_BUFFER_SIZE: usize = 0x10000;
 
 #[ repr (C) ]
 struct LzmaStream {
@@ -77,16 +76,16 @@ extern {
 }
 
 pub struct LzmaReader <'a> {
-	input: & 'a mut Read,
-	input_buffer: [u8; READ_BUFFER_SIZE],
+	input: & 'a mut BufRead,
 	lzma_stream: LzmaStream,
 	error: bool,
+	eof: bool,
 }
 
 impl <'a> LzmaReader <'a> {
 
 	pub fn new (
-		input: & 'a mut Read,
+		input: & 'a mut BufRead,
 	) -> Result <LzmaReader <'a>, String> {
 
 		let mut lzma_stream = LzmaStream {
@@ -137,9 +136,9 @@ impl <'a> LzmaReader <'a> {
 
 		Ok (LzmaReader {
 			input: input,
-			input_buffer: [0u8; READ_BUFFER_SIZE],
 			lzma_stream: lzma_stream,
 			error: false,
+			eof: false,
 		})
 
 	}
@@ -154,10 +153,12 @@ impl <'a> Read for LzmaReader <'a> {
 	) -> io::Result <usize> {
 
 		if self.error {
-
 			panic! (
 				"Error already");
+		}
 
+		if self.eof {
+			return Ok (0);
 		}
 
 		// set output buffer
@@ -170,39 +171,67 @@ impl <'a> Read for LzmaReader <'a> {
 
 		loop {
 
-			// read more input, if needed
+			// read input
 
-			if self.lzma_stream.avail_in == 0 {
+			let prev_total_in =
+				self.lzma_stream.total_in;
 
-				self.lzma_stream.avail_in =
+			let decode_result;
+
+			{
+
+				let input_buffer =
 					try! (
-						self.input.read (
-							& mut self.input_buffer));
+						self.input.fill_buf ());
 
-				if self.lzma_stream.avail_in == 0 {
+				if input_buffer.len () == 0 {
 
-					return Ok (
-						output_buffer.len ()
-							- self.lzma_stream.avail_out);
+					self.error = true;
+
+					return Err (
+						io::Error::new (
+							io::ErrorKind::InvalidData,
+							"LZMA stream truncated"));
 
 				}
 
 				self.lzma_stream.next_in =
-					& self.input_buffer [0];
+					& input_buffer [0];
+
+				self.lzma_stream.avail_in =
+					input_buffer.len ();
+
+				// perform decompression
+
+				decode_result = unsafe {
+					lzma_code (
+						& mut self.lzma_stream,
+						LZMA_RUN,
+					)
+				};
 
 			}
 
-			// perform decompression
+			self.input.consume (
+				self.lzma_stream.total_in as usize
+					- prev_total_in as usize);
 
-			let decode_result = unsafe {
-				lzma_code (
-					& mut self.lzma_stream,
-					LZMA_RUN,
-				)
-			};
+			// handle stream end
 
-			if decode_result != LZMA_OK
-				&& decode_result != LZMA_STREAM_END {
+			if decode_result == LZMA_STREAM_END {
+
+				self.eof = true;
+
+				return Ok (
+					output_buffer.len () as usize
+						- self.lzma_stream.avail_out as usize
+				);
+
+			}
+
+			// handle error
+
+			if decode_result != LZMA_OK {
 
 				self.error = true;
 
@@ -215,7 +244,7 @@ impl <'a> Read for LzmaReader <'a> {
 
 			}
 
-			// return when the buffer is full
+			// handle output buffer full
 
 			if self.lzma_stream.avail_out == 0 {
 
@@ -246,29 +275,4 @@ impl <'a> Drop for LzmaReader <'a> {
 
 }
 
-/*
-pub fn decode (
-	input: &mut Read,
-) -> Result <Vec <u8>, TfError> {
-
-	loop {
-
-		result.extend_from_slice (
-			& out_bytes [0 .. write_buffer_size - stream.avail_out]);
-
-		if decode_result == LZMA_STREAM_END {
-
-			unsafe {
-				lzma_end (
-					&mut stream,
-				);
-			}
-
-			return Ok (result)
-
-		}
-
-	}
-
-}
-*/
+// ex: noet ts=4 filetype=rust
