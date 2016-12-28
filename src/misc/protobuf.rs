@@ -14,10 +14,10 @@ pub fn protobuf_result <Type> (
 }
 
 pub fn protobuf_result_with_prefix <
-	Prefix: Into <String>,
+	PrefixFunction: FnOnce () -> String,
 	Type,
 > (
-	prefix: Prefix,
+	prefix_function: PrefixFunction,
 	result: Result <Type, ProtobufError>,
 ) -> Result <Type, String> {
 
@@ -26,7 +26,7 @@ pub fn protobuf_result_with_prefix <
 
 		format! (
 			"{}{}",
-			prefix.into (),
+			prefix_function (),
 			protobuf_error.description ())
 
 	)

@@ -1574,6 +1574,12 @@ impl Repository {
 		& self.data.config
 	}
 
+	pub fn path (
+		& self,
+	) -> & Path {
+		& self.data.path
+	}
+
 	/// This is an accessor method to access the `StorageInfo` protobug struct
 	/// which was loaded from the repository's index file.
 

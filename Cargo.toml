@@ -29,6 +29,7 @@
 	num_cpus = "1.1"
 	output = "0.4"
 	protobuf = "1.0"
+	rand = "0.3"
 	rust-crypto = "0.2"
 	rustc-serialize = "0.3"
 
@@ -39,17 +40,22 @@
 
 [[bin]]
 
+	name = "rzbackup-convert"
+	path = "src/bin/convert.rs"
+
+[[bin]]
+
 	name = "rzbackup-decrypt"
 	path = "src/bin/decrypt.rs"
 
 [[bin]]
 
-	name = "rzbackup-server"
-	path = "src/bin/server.rs"
+	name = "rzbackup-restore"
+	path = "src/bin/restore.rs"
 
 [[bin]]
 
-	name = "rzbackup-restore"
-	path = "src/bin/restore.rs"
+	name = "rzbackup-server"
+	path = "src/bin/server.rs"
 
 # ex: noet ts=4 filetype=cargo

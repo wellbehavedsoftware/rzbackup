@@ -26,6 +26,7 @@ extern crate lru_cache;
 extern crate minilzo;
 extern crate output;
 extern crate protobuf;
+extern crate rand;
 extern crate rustc_serialize;
 
 #[ doc (hidden) ]
@@ -37,11 +38,15 @@ mod server;
 mod zbackup;
 
 pub use zbackup::crypto::CryptoReader;
+pub use zbackup::crypto::CryptoWriter;
 pub use zbackup::data::*;
+pub use zbackup::file::TempFileManager;
 pub use zbackup::metadata::*;
 pub use zbackup::randaccess::RandomAccess;
+pub use zbackup::read;
 pub use zbackup::repo::Repository;
 pub use zbackup::repo::RepositoryConfig;
+pub use zbackup::write;
 
 pub use server::run_server;
 

@@ -365,7 +365,7 @@ fn read_message <
 	let message_length =
 		try! (
 			protobuf_result_with_prefix (
-				format! (
+				|| format! (
 					"Error reading {} length: ",
 					name_function ()),
 				coded_input_stream.read_raw_varint32 ()));
@@ -373,7 +373,7 @@ fn read_message <
 	let old_limit =
 		try! (
 			protobuf_result_with_prefix (
-				format! (
+				|| format! (
 					"Error preparing to read {}: ",
 					name_function ()),
 				coded_input_stream.push_limit (
@@ -382,7 +382,7 @@ fn read_message <
 	let message =
 		try! (
 			protobuf_result_with_prefix (
-				format! (
+				|| format! (
 					"Error reading {}: ",
 					name_function ()),
 				protobuf::core::parse_from::<Type> (
