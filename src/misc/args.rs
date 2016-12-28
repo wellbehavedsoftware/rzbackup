@@ -51,4 +51,21 @@ pub fn path_required (
 
 }
 
+pub fn path_optional (
+	matches: & clap::ArgMatches,
+	name: & str,
+) -> Option <PathBuf> {
+
+	matches.value_of_os (
+		name,
+	).map (
+		|os_string|
+
+		PathBuf::from (
+			os_string)
+
+	)
+
+}
+
 // ex: noet ts=4 filetype=rust

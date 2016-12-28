@@ -68,12 +68,15 @@ fn balance_indexes_real (
 
 	// open repository
 
-	let repository =
-		match Repository::open (
+	let repository = match (
+
+		Repository::open (
 			& output,
 			Repository::default_config (),
 			& arguments.repository_path,
-			Some (arguments.password_file_path)) {
+			arguments.password_file_path)
+
+	) {
 
 		Ok (repository) =>
 			repository,
@@ -274,7 +277,7 @@ enum Arguments {
 
 struct BalanceIndexesArguments {
 	repository_path: PathBuf,
-	password_file_path: PathBuf,
+	password_file_path: Option <PathBuf>,
 	bundles_per_index: u64,
 }
 
@@ -342,7 +345,7 @@ fn parse_arguments (
 					"repository"),
 
 			password_file_path:
-				args::path_required (
+				args::path_optional (
 					& clap_matches,
 					"password-file"),
 
