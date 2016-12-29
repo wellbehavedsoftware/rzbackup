@@ -33,6 +33,9 @@ extern crate rustc_serialize;
 #[ macro_use ]
 pub mod misc;
 
+#[ doc (hidden) ]
+pub mod convert;
+
 mod compress;
 mod server;
 mod zbackup;

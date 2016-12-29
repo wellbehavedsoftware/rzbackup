@@ -251,33 +251,43 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 	{
 
-		// read bundle info
-
 		let mut coded_input_stream =
 			CodedInputStream::from_buffered_reader (
 				& mut source);
 
-		let file_header: proto::FileHeader =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| "file header".to_string ()));
+		// read bundle file header
 
-		if file_header.get_version () != 1 {
+		let bundle_file_header: proto::BundleFileHeader =
+			read_message (
+				& mut coded_input_stream,
+				|| "bundle file header".to_string (),
+			) ?;
 
-			panic! (
-				"Unsupported backup version {}",
-				file_header.get_version ());
+		if bundle_file_header.get_version () != 1 {
+
+			return Err (
+				format! (
+					"Unsupported bundle file version {}",
+					bundle_file_header.get_version ()));
 
 		}
 
-		bundle_info = try! (
+		if bundle_file_header.get_compression_method () != "lzma" {
 
+			return Err (
+				format! (
+					"Unsupported bundle file compression method {}",
+					bundle_file_header.get_compression_method ()));
+
+		}
+
+		// read bundle info
+
+		bundle_info =
 			read_message (
 				& mut coded_input_stream,
-				|| "bundle info".to_owned ())
-
-		);
+				|| "bundle info".to_owned (),
+			) ?;
 
 	}
 

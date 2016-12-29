@@ -18,5 +18,4 @@ pub fn string_result_with_prefix <
 
 }
 
-
 // ex: noet ts=4 filetype=rust

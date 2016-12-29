@@ -153,6 +153,8 @@ impl <Target: Write> Write for CryptoWriter <Target> {
 		buffer: & [u8],
 	) -> io::Result <usize> {
 
+//println! ("CRYPTOWRITE {}", buffer.len ());
+
 		if self.plaintext_eof {
 
 			panic! (

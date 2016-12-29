@@ -49,7 +49,11 @@ fn main_real (
 			& output,
 			Repository::default_config (),
 			repository_path,
-			Some (password_file_path)) {
+			if password_file_path != "" {
+				Some (password_file_path)
+			} else {
+				None
+			}) {
 
 		Ok (repository) =>
 			repository,

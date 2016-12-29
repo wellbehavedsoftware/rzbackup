@@ -27,7 +27,7 @@ impl TempFileManager {
 
 			io_result_with_prefix (
 				format! (
-					"Error creating tmp directory {}",
+					"Error creating tmp directory {}: ",
 					temp_dir_path.clone ().to_string_lossy ()),
 				fs::create_dir (
 					temp_dir_path.clone (),
@@ -62,7 +62,7 @@ impl TempFileManager {
 		let temp_file =
 			io_result_with_prefix (
 				format! (
-					"Error creating temporary file {}",
+					"Error creating temporary file {}: ",
 					temp_file_path.to_string_lossy ()),
 				File::create (
 					temp_file_path),
@@ -90,7 +90,7 @@ impl TempFileManager {
 	}
 
 	pub fn commit (
-		self
+		& mut self
 	) -> Result <(), String> {
 
 		// sync all temp files
@@ -101,7 +101,7 @@ impl TempFileManager {
 			let temp_file = (
 				io_result_with_prefix (
 					format! (
-						"Error syncing temp file {}",
+						"Error syncing temp file {}: ",
 						temp_file_name),
 					File::open (
 						self.temp_dir_path.join (
@@ -110,7 +110,7 @@ impl TempFileManager {
 
 			io_result_with_prefix (
 				format! (
-					"Error syncing temp file {}",
+					"Error syncing temp file {}: ",
 					temp_file_name),
 				temp_file.sync_all ()
 			) ?;
@@ -122,9 +122,20 @@ impl TempFileManager {
 		for & (ref temp_file_name, ref target_path)
 		in self.temp_files.iter () {
 
+			let parent_dir =
+				target_path.parent ().unwrap ();
+
 			io_result_with_prefix (
 				format! (
-					"Error renaming temp file {} to {}",
+					"Error creating target directory {}: ",
+					parent_dir.to_string_lossy ()),
+				fs::create_dir_all (
+					parent_dir),
+			) ?;
+
+			io_result_with_prefix (
+				format! (
+					"Error renaming temp file {} to {}: ",
 					temp_file_name,
 					target_path.to_string_lossy ()),
 				fs::rename (
@@ -135,19 +146,23 @@ impl TempFileManager {
 
 		}
 
+		self.temp_files.clear ();
+
 		// delete files
 
-		for delete_file_name in self.delete_files {
+		for delete_file_name in self.delete_files.iter () {
 
 			io_result_with_prefix (
 				format! (
-					"Error deleting {}",
+					"Error deleting {}: ",
 					delete_file_name.to_string_lossy ()),
 				fs::remove_file (
 					delete_file_name),
 			) ?;
 
 		}
+
+		self.delete_files.clear ();
 
 		// return
 

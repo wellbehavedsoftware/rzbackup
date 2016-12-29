@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::io;
 use std::io::Write;
 
@@ -12,10 +13,174 @@ use protobuf::stream::CodedOutputStream;
 use rand;
 use rand::Rng;
 
-use misc::*;
-use zbackup::crypto::CryptoWriter;
-use zbackup::data::*;
-use zbackup::proto;
+use ::compress::lzma;
+use ::misc::*;
+use ::zbackup::crypto::CryptoWriter;
+use ::zbackup::data::*;
+use ::zbackup::proto;
+
+pub fn write_bundle <
+	ProgressCallback: Fn (u64) -> (),
+> (
+	target: Box <Write>,
+	key: Option <[u8; KEY_SIZE]>,
+	chunk_ids_and_data: & [(ChunkId, Vec <u8>)],
+	progress_callback: ProgressCallback,
+) -> Result <proto::BundleInfo, String> {
+
+	let mut target =
+		io_result (
+			wrap_writer (
+				target,
+				key),
+		) ?;
+
+	let mut bundle_info;
+
+	{
+
+		let mut coded_output_stream =
+			CodedOutputStream::new (
+				& mut target);
+
+		// write bundle file header
+
+		let mut bundle_file_header =
+			proto::BundleFileHeader::new ();
+
+		bundle_file_header.set_version (
+			1);
+
+		bundle_file_header.set_compression_method (
+			"lzma".to_string ());
+
+		write_message (
+			|| "bundle file header".to_string (),
+			& mut coded_output_stream,
+			& bundle_file_header,
+		) ?;
+
+		// write bundle info
+
+		bundle_info =
+			proto::BundleInfo::new ();
+
+		for & (chunk_id, ref chunk_data)
+		in chunk_ids_and_data.iter () {
+
+			let mut chunk_record =
+				proto::BundleInfo_ChunkRecord::new ();
+
+			chunk_record.set_id (
+				chunk_id.to_vec ());
+
+			chunk_record.set_size (
+				chunk_data.len () as u32);
+
+			bundle_info.mut_chunk_record ().push (
+				chunk_record);
+
+		}
+
+		write_message (
+			|| "bundle info".to_string (),
+			& mut coded_output_stream,
+			& bundle_info,
+		) ?;
+
+		protobuf_result (
+			coded_output_stream.flush ()
+		) ?;
+
+	}
+
+	// write checksum
+
+	io_result (
+		target.flush (),
+	) ?;
+
+	write_adler (
+		& mut target,
+	) ?;
+
+	// write compressed data
+
+	{
+
+		let mut lzma_writer =
+			lzma::LzmaWriter::new (
+				& mut target,
+			).map_err (
+				|lzma_error|
+
+				format! (
+					"Error starting LZMA compression: {}",
+					lzma_error)
+
+			) ?;
+
+		let mut chunks_written: u64 = 0;
+
+		for & (_, ref chunk_data)
+		in chunk_ids_and_data.iter () {
+
+//println! ("ABOUT TO WRITE {}", chunk_data.len ());
+
+			lzma_writer.write_all (
+				& chunk_data,
+			).map_err (
+				|io_error|
+
+				format! (
+					"Error writing LZMA data: {}",
+					io_error.description ())
+
+			) ?;
+
+			// callback
+
+			chunks_written += 1;
+
+			progress_callback (
+				chunks_written);
+
+		}
+
+		lzma_writer.close (
+		).map_err (
+			|lzma_error|
+
+			format! (
+				"Error finishing LZMA compression: {}",
+				lzma_error.description ())
+
+		) ?;
+
+	}
+
+	// write checksum
+
+	io_result (
+		target.flush (),
+	) ?;
+
+	write_adler (
+		& mut target,
+	) ?;
+
+	// close file
+
+	io_result (
+		target.close ()
+	) ?;
+
+	// return
+
+	Ok (bundle_info)
+
+
+}
 
 pub fn write_index (
 	target: Box <Write>,
@@ -23,14 +188,12 @@ pub fn write_index (
 	index_entries: & [IndexEntry],
 ) -> Result <(), String> {
 
-	let mut target = (
-
+	let mut target =
 		io_result (
 			wrap_writer (
 				target,
-				key))
-
-	) ?;
+				key),
+		) ?;
 
 	{
 
@@ -93,11 +256,11 @@ pub fn write_index (
 
 	}
 
+	// write checksum
+
 	io_result (
 		target.flush (),
 	) ?;
-
-	// write checksum
 
 	write_adler (
 		& mut target,
