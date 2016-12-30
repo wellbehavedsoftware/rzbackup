@@ -25,7 +25,6 @@ use lru_cache::LruCache;
 
 use output::Output;
 
-use protobuf;
 use protobuf::stream::CodedInputStream;
 
 use rustc_serialize::hex::ToHex;
@@ -804,35 +803,12 @@ impl Repository {
 
 				} else {
 
-					let instruction_length =
-						try! (
-							protobuf_result (
-								coded_input_stream.read_raw_varint32 ()));
-
-					let instruction_old_limit =
-						try! (
-
-						protobuf_result (
-							coded_input_stream.push_limit (
-								instruction_length))
-
-					);
-
-					let backup_instruction =
-						try! (
-
-						protobuf_result (
-							protobuf::core::parse_from::<
-								proto::BackupInstruction
-							> (
-								& mut coded_input_stream,
-							),
-						)
-
-					);
-
-					coded_input_stream.pop_limit (
-						instruction_old_limit);
+					let backup_instruction: proto::BackupInstruction =
+						read_message (
+							& mut coded_input_stream,
+							|| format! (
+								"backup instruction"),
+						) ?;
 
 					future_chunk_job = Some (
 

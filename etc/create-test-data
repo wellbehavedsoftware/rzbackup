@@ -1,0 +1,117 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
+versions=(
+	"version-3.0.0"
+	"version-2.0.9"
+	"version-2.0.8"
+	"version-2.0.7"
+	"version-2.0.6"
+	"version-2.0.5"
+	"version-2.0.4"
+	"version-2.0.3"
+	"version-2.0.2"
+	"version-2.0.1"
+	"version-2.0.0"
+)
+
+repos=(
+	"test-encrypted:password-file"
+	"test-non-encrypted"
+)
+
+function main {
+
+	init_repos
+	backup_versions
+
+}
+
+function init_repos {
+
+	local repo
+
+	for repo in "${repos[@]}"; do
+		rm -rf "$(repo_path $repo)"
+		zbackup_init $repo
+	done
+
+}
+
+function backup_versions {
+
+	local version
+
+	for version in "${versions[@]}"; do
+
+		echo "Adding version $version" >&2
+
+		rm -rf "work/$version"
+		mkdir "work/$version"
+
+		{
+			git archive --format tar "$version"
+		} | {
+			tar --extract --directory "work/$version"
+		}
+
+		for repo in "${repos[@]}"; do
+
+			{
+				tar --create --directory "work" "$version"
+			} | {
+				zbackup_backup $repo /$version.tar
+			}
+
+		done
+
+		rm -rf "work/$version"
+
+	done
+
+}
+
+function repo_path {
+
+	local repository password_file
+
+	IFS=":" read repository password_file <<<"$1"
+
+	echo "work/$repository"
+
+}
+
+function repo_args {
+
+	local repository password_file
+
+	IFS=":" read repository password_file <<<"$1"
+
+	if test "$password_file"; then
+		echo "--password-file work/$password_file"
+	else
+		echo "--non-encrypted"
+	fi
+
+}
+
+function zbackup_init {
+
+	zbackup init \
+		$(repo_args $1) \
+		"$(repo_path $1)"
+
+}
+
+function zbackup_backup {
+
+	zbackup backup \
+		$(repo_args $1) \
+		"$(repo_path $1)/backups$2"
+
+}
+
+main "$@"
+
+# ex: noet ts=4 filetype=sh

@@ -364,7 +364,7 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 }
 
-fn read_message <
+pub fn read_message <
 	Type: protobuf::MessageStatic,
 	NameFunction: Fn () -> String,
 > (

@@ -11,7 +11,7 @@ dependencies = [
  "lru-cache 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "minilzo 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "output 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "protobuf 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "output"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "lazy_static 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -260,7 +260,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum minilzo 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7b4d5a2c254366545276c5a9203fb2e3a699df6ea15a625bea1df367270a3a80"
 "checksum minilzo-sys 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ce123edaa554212f9aef7466ae6805c59ce71edd79ead0c2aa8e828e444de9e5"
 "checksum num_cpus 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "55aabf4e2d6271a2e4e4c0f2ea1f5b07cc589cc1a9e9213013b54a76678ca4f3"
-"checksum output 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "499ad04f995647a94ab937bbafde43a36285a4fb732f3ec66256f236906987f0"
+"checksum output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fa48553a7b3daf627fb657b93589c7ec94ec2048dc8c1445eba00f6d21676772"
 "checksum protobuf 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)" = "6ec4c2fe04370298218a09ab53a534febf54c160c5554e4de987b6d73c916d5d"
 "checksum rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "022e0636ec2519ddae48154b028864bdce4eaf7d35226ab8e65c611be97b189d"
 "checksum rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)" = "f76d05d3993fd5f4af9434e8e436db163a12a9d40e1a58a726f27a01dfd12a2a"

@@ -32,6 +32,11 @@ fn main () {
 				& output,
 				arguments),
 
+		Arguments::GcIndexes (arguments) =>
+			gc_indexes_command (
+				& output,
+				arguments),
+
 	}
 
 }
@@ -74,9 +79,29 @@ fn balance_indexes_command (
 
 }
 
+fn gc_indexes_command (
+	output: & Output,
+	arguments: GcIndexesArguments,
+) {
+
+	if let Err (error) =
+		gc_indexes (
+			output,
+			& arguments) {
+
+		output.message (
+			error);
+
+		process::exit (1);
+
+	}
+
+}
+
 enum Arguments {
 	BalanceBundles (BalanceBundlesArguments),
 	BalanceIndexes (BalanceIndexesArguments),
+	GcIndexes (GcIndexesArguments),
 }
 
 fn parse_arguments (
@@ -91,6 +116,7 @@ fn parse_arguments (
 
 		.subcommand (balance_bundles_subcommand ())
 		.subcommand (balance_indexes_subcommand ())
+		.subcommand (gc_indexes_subcommand ())
 
 	);
 
@@ -111,6 +137,14 @@ fn parse_arguments (
 
 		Arguments::BalanceIndexes (
 			balance_indexes_arguments_parse (
+				clap_matches))
+
+	} else if let Some (clap_matches) =
+		clap_matches.subcommand_matches (
+			"gc-indexes") {
+
+		Arguments::GcIndexes (
+			gc_indexes_arguments_parse (
 				clap_matches))
 
 	} else {
