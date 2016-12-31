@@ -260,7 +260,7 @@ pub fn gc_bundles (
 		) ?;
 
 	let bundles_to_compact_total = bundles_to_compact.len () as u64;
-	let bundles_to_compact_count: u64 = 0;
+	let mut bundles_to_compact_count: u64 = 0;
 
 	for bundle_to_compact in bundles_to_compact {
 
