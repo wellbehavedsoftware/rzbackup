@@ -2,6 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+use rustc_serialize::hex::ToHex;
+
 use ::misc::*;
 
 pub fn scan_index_files <
@@ -142,6 +144,53 @@ fn scan_backup_files_real (
 	// return
 
 	Ok (())
+
+}
+
+pub fn scan_bundle_files <
+	RepositoryPath: AsRef <Path>,
+> (
+	repository_path: RepositoryPath,
+) -> Result <Vec <String>, String> {
+
+	let repository_path =
+		repository_path.as_ref ();
+
+	let mut bundle_files: Vec <String> =
+		Vec::new ();
+
+	for prefix in (0 .. 256).map (
+		|byte| [ byte as u8 ].to_hex ()
+	) {
+
+		let bundles_directory =
+			repository_path
+				.join ("bundles")
+				.join (prefix);
+
+		if ! bundles_directory.exists () {
+			continue;
+		}
+
+		for dir_entry_result in (
+			io_result (
+				fs::read_dir (
+					bundles_directory))
+		) ? {
+
+			let dir_entry = (
+				io_result (
+					dir_entry_result)
+			) ?;
+
+			bundle_files.push (
+				dir_entry.file_name ().to_str ().unwrap ().to_owned ());
+
+		}
+
+	}
+
+	Ok (bundle_files)
 
 }
 

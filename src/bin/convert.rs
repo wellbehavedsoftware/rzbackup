@@ -32,6 +32,11 @@ fn main () {
 				& output,
 				arguments),
 
+		Arguments::GcBundles (arguments) =>
+			gc_bundles_command (
+				& output,
+				arguments),
+
 		Arguments::GcIndexes (arguments) =>
 			gc_indexes_command (
 				& output,
@@ -79,6 +84,25 @@ fn balance_indexes_command (
 
 }
 
+fn gc_bundles_command (
+	output: & Output,
+	arguments: GcBundlesArguments,
+) {
+
+	if let Err (error) =
+		gc_bundles (
+			output,
+			& arguments) {
+
+		output.message (
+			error);
+
+		process::exit (1);
+
+	}
+
+}
+
 fn gc_indexes_command (
 	output: & Output,
 	arguments: GcIndexesArguments,
@@ -101,6 +125,7 @@ fn gc_indexes_command (
 enum Arguments {
 	BalanceBundles (BalanceBundlesArguments),
 	BalanceIndexes (BalanceIndexesArguments),
+	GcBundles (GcBundlesArguments),
 	GcIndexes (GcIndexesArguments),
 }
 
@@ -116,6 +141,7 @@ fn parse_arguments (
 
 		.subcommand (balance_bundles_subcommand ())
 		.subcommand (balance_indexes_subcommand ())
+		.subcommand (gc_bundles_subcommand ())
 		.subcommand (gc_indexes_subcommand ())
 
 	);
@@ -137,6 +163,14 @@ fn parse_arguments (
 
 		Arguments::BalanceIndexes (
 			balance_indexes_arguments_parse (
+				clap_matches))
+
+	} else if let Some (clap_matches) =
+		clap_matches.subcommand_matches (
+			"gc-bundles") {
+
+		Arguments::GcBundles (
+			gc_bundles_arguments_parse (
 				clap_matches))
 
 	} else if let Some (clap_matches) =

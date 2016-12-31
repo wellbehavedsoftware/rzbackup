@@ -230,13 +230,83 @@ pub fn read_index <PathRef: AsRef <Path>> (
 
 }
 
+pub fn read_bundle_info <PathRef: AsRef <Path>> (
+	path: PathRef,
+	key: Option <[u8; KEY_SIZE]>,
+) -> Result <proto::BundleInfo, String> {
+
+	let bundle_info: proto::BundleInfo;
+
+	// open file
+
+	let mut source = try! (
+
+		io_result (
+			open_file_with_crypto_and_adler (
+				path,
+				key))
+
+	);
+
+	{
+
+		let mut coded_input_stream =
+			CodedInputStream::from_buffered_reader (
+				& mut source);
+
+		// read bundle file header
+
+		let bundle_file_header: proto::BundleFileHeader =
+			read_message (
+				& mut coded_input_stream,
+				|| "bundle file header".to_string (),
+			) ?;
+
+		if bundle_file_header.get_version () != 1 {
+
+			return Err (
+				format! (
+					"Unsupported bundle file version {}",
+					bundle_file_header.get_version ()));
+
+		}
+
+		if bundle_file_header.get_compression_method () != "lzma" {
+
+			return Err (
+				format! (
+					"Unsupported bundle file compression method {}",
+					bundle_file_header.get_compression_method ()));
+
+		}
+
+		// read bundle info
+
+		bundle_info =
+			read_message (
+				& mut coded_input_stream,
+				|| "bundle info".to_owned (),
+			) ?;
+
+	}
+
+	// verify checksum
+
+	try! (
+		verify_adler (
+			& mut source));
+
+	Ok (bundle_info)
+
+}
+
 pub fn read_bundle <PathRef: AsRef <Path>> (
 	path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
-) -> Result <Vec <([u8; 24], Vec <u8>)>, String> {
+) -> Result <Vec <(ChunkId, Vec <u8>)>, String> {
 
 	let bundle_info: proto::BundleInfo;
-	let mut chunks: Vec <([u8; 24], Vec <u8>)>;
+	let mut chunks: Vec <(ChunkId, Vec <u8>)>;
 
 	// open file
 

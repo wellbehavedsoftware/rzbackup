@@ -90,7 +90,7 @@ pub fn gc_indexes (
 			"Found {} backup files",
 			backup_files.len ()));
 
-	// todo
+	// get a list of chunks used by backups
 
 	output.status (
 		"Reading backups ...");
