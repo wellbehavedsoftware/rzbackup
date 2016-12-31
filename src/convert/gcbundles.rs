@@ -332,6 +332,8 @@ pub fn gc_bundles (
 
 		output.status_done ();
 
+		bundles_to_compact_count += 1;
+
 	}
 
 	// done, return
