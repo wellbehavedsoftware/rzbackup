@@ -43,7 +43,7 @@ In cargo.toml:
 
 ```toml
 [dependencies]
-rzbackup = '3.0'
+rzbackup = '3.1'
 ```
 
 Example code, for demonstration (won't compile):
