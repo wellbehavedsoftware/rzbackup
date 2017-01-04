@@ -5,9 +5,10 @@
 	description = "RZBackup"
 	authors = [ "James Pharaoh <james@pharaoh.uk>" ]
 	license = "Apache-2.0"
-	homepage = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-backup"
-	repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/wbs-backup"
+	homepage = "http://rzbackup.com"
+	repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/rzbackup"
 	readme = "README.md"
+
 	build = "src/build.rs"
 
 	exclude = [
