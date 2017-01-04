@@ -7,6 +7,7 @@ contents=(
 	"librzbackup.rlib"
 
 	"rzbackup-client"
+	"rzbackup-convert"
 	"rzbackup-decrypt"
 	"rzbackup-restore"
 	"rzbackup-server"
