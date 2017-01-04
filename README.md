@@ -1,8 +1,8 @@
 # RZBackup
 
-https://github.com/wellbehavedsoftware/wbs-backup
+http://rzbackup.com
 
-James Pharaoh <james@wellbehavedsoftware.com>
+James Pharaoh <james@pharaoh.uk>
 
 This is a partial Rust clone of [ZBackup](http://zbackup.org/), along with some
 unique features of its own.
