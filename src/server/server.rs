@@ -248,12 +248,9 @@ impl Command for ServerCommand {
 
 				.long ("work-jobs-total")
 				.value_name ("JOBS")
-				.default_value (& self.defaults.work_jobs_total)
-				.help ("Number of decompression jobs to start in parallel \
-					while performining a restore. This is basically the amount \
-					of lookahead which is performed during the restore, and \
-					allows multiple bundles to be decompressed in parellel, \
-					taking advantage of more than one CPU core.")
+				.default_value ("0")
+				.hidden (true)
+				.help ("Deprecated and ignored")
 
 			)
 
@@ -262,10 +259,9 @@ impl Command for ServerCommand {
 
 				.long ("work-jobs-batch")
 				.value_name ("JOBS")
-				.default_value (& self.defaults.work_jobs_batch)
-				.help ("Number of jobs to add or remove from the work list at \
-					one time. This is supposed to make this process slightly \
-					more efficient by reducing locking.")
+				.default_value ("0")
+				.hidden (true)
+				.help ("Deprecated and ignored")
 
 			)
 
@@ -341,17 +337,8 @@ fn repository_config_parse (
 				"filesystem-cache-path",
 			).to_string_lossy ().to_string (),
 
-		work_jobs_total:
-			args::u64_required (
-				clap_matches,
-				"work-jobs-total",
-			) as usize,
-
-		work_jobs_batch:
-			args::u64_required (
-				clap_matches,
-				"work-jobs-batch",
-			) as usize,
+		work_jobs_total: 0, // deprecated and ignored
+		work_jobs_batch: 0, // deprecated and ignored
 
 	}
 
@@ -365,8 +352,6 @@ struct DefaultArgumentStringValues {
 	max_compressed_filesystem_cache_entries: String,
 	max_threads: String,
 	filesystem_cache_path: String,
-	work_jobs_total: String,
-	work_jobs_batch: String,
 }
 
 fn build_default_argument_string_values (
@@ -388,12 +373,6 @@ fn build_default_argument_string_values (
 
 		filesystem_cache_path:
 			::FILESYSTEM_CACHE_PATH.to_string (),
-
-		work_jobs_total:
-			::WORK_JOBS_TOTAL.to_string (),
-
-		work_jobs_batch:
-			::WORK_JOBS_BATCH.to_string (),
 
 	}
 

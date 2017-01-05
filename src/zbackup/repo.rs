@@ -66,8 +66,8 @@ pub struct RepositoryConfig {
 	pub max_compressed_filesystem_cache_entries: usize,
 	pub max_threads: usize,
 	pub filesystem_cache_path: String,
-	pub work_jobs_total: usize,
-	pub work_jobs_batch: usize,
+	pub work_jobs_total: usize, // deprecated and ignored
+	pub work_jobs_batch: usize, // deprecated and ignored
 }
 
 struct RepositoryData {
@@ -127,11 +127,8 @@ impl Repository {
 			filesystem_cache_path:
 				FILESYSTEM_CACHE_PATH.to_owned (),
 
-			work_jobs_total:
-				WORK_JOBS_TOTAL,
-
-			work_jobs_batch:
-				WORK_JOBS_BATCH,
+			work_jobs_total: 0, // deprecated and ignored
+			work_jobs_batch: 0, // deprecated and ignored
 
 		}
 

@@ -14,16 +14,11 @@ pub const IV_SIZE: usize = 16;
 /// The size of the buffers used when reading and decompressing ZBackup data
 pub const BUFFER_SIZE: usize = 0x2000;
 
-/// The default number of total jobs to queue up during a restore operation.
-/// Since many chunks can be stored in a single bundle, and we can only use a
-/// single thread to decompress one bundle, this needs to be high enough to
-/// guarantee that we will always have enough jobs in the queue to make use of
-/// all of the threads available.
-pub const WORK_JOBS_TOTAL: usize = 0x200;
+#[ doc (hidden) ]
+pub const WORK_JOBS_TOTAL: usize = 0;
 
-/// The batch size for adding and removing jobs from the work queue. By doing
-/// this in batches, we can avoid a certain amount of unnecessary locking.
-pub const WORK_JOBS_BATCH: usize = 0x20;
+#[ doc (hidden) ]
+pub const WORK_JOBS_BATCH: usize = 0;
 
 /// A ZBackup bundle ID
 pub type BundleId = [u8; 24];
