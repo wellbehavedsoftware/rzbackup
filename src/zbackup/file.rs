@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::File;
+use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -138,7 +139,7 @@ impl TempFileManager {
 					"Error renaming temp file {} to {}: ",
 					temp_file_name,
 					target_path.to_string_lossy ()),
-				fs::rename (
+				rename_or_copy_and_delete (
 					self.temp_dir_path.join (
 						temp_file_name),
 					target_path)
@@ -169,6 +170,60 @@ impl TempFileManager {
 		Ok (())
 
 	}
+
+}
+
+fn rename_or_copy_and_delete <
+	SourcePath: AsRef <Path>,
+	TargetPath: AsRef <Path>,
+> (
+	source_path: SourcePath,
+	target_path: TargetPath,
+) -> Result <(), io::Error> {
+
+	let source_path = source_path.as_ref ();
+	let target_path = target_path.as_ref ();
+
+	// try a simple rename
+
+	if let Ok (()) = (
+		fs::rename (
+			source_path,
+			target_path)
+	) {
+		return Ok (());
+	}
+
+	// copy the file contents
+
+	{
+
+		let mut source =
+			File::open (
+				source_path,
+			) ?;
+
+		let mut target =
+			File::create (
+				target_path,
+			) ?;
+
+		io::copy (
+			& mut source,
+			& mut target,
+		) ?;
+
+		target.sync_all () ?;
+
+	}
+
+	// delete the original
+
+	fs::remove_file (
+		source_path,
+	) ?;
+
+	Ok (())
 
 }
 
