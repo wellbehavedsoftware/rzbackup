@@ -116,7 +116,7 @@ impl Command for ClientReindexCommand {
 			.arg (
 				clap::Arg::with_name ("server-address")
 
-				.index (1)
+				.long ("server-address")
 				.value_name ("SERVER-ADDRESS")
 				.required (true)
 				.help ("Server address, in 'host:port' format")
