@@ -227,7 +227,7 @@ pub fn balance_indexes_subcommand <'a, 'b> (
 
 			.long ("bundles-per-index")
 			.value_name ("BUNDLES-PER-INDEX")
-			.default_value ("65536")
+			.default_value ("16384")
 			.help ("Bundles per index")
 
 		)
