@@ -11,8 +11,13 @@ use adler32::RollingAdler32;
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
 
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
+
 use protobuf;
 use protobuf::stream::CodedInputStream;
+
+use rustc_serialize::hex::ToHex;
 
 use misc::*;
 use compress::lzma;
@@ -427,17 +432,47 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 		for chunk_record in bundle_info.get_chunk_record () {
 
+			let chunk_id =
+				to_array_24 (
+					chunk_record.get_id ());
+
+			// verify sha1 sum
+
 			let mut chunk_bytes: Vec <u8> =
 				vec! [0u8; chunk_record.get_size () as usize];
 
-			try! (
-				io_result (
-					lzma_reader.read_exact (
-						& mut chunk_bytes)));
+			io_result (
+				lzma_reader.read_exact (
+					& mut chunk_bytes),
+			) ?;
+
+			let mut sha1_digest =
+				Sha1::new ();
+
+			sha1_digest.input (
+				& chunk_bytes);
+
+			let mut sha1_sum: [u8; 20] =
+				[0u8; 20];
+
+			sha1_digest.result (
+				& mut sha1_sum);
+
+			if chunk_id [0 .. 16] != sha1_sum [0 .. 16] {
+
+				return Err (
+					format! (
+						"Got invalid sha1 sum for chunk {}: {}",
+						chunk_id.to_hex (),
+						sha1_sum.to_hex ()));
+
+			}
+
+			// store it
 
 			chunks.push (
 				(
-					to_array_24 (chunk_record.get_id ()),
+					chunk_id,
 					chunk_bytes,
 				)
 			);
