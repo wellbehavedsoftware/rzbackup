@@ -58,12 +58,15 @@ impl <'a> RandomAccess <'a> {
 		backup_name: & str,
 	) -> Result <RandomAccess <'a>, String> {
 
+		let (input_bytes, _checksum) =
+			repo.read_and_expand_backup (
+				output,
+				backup_name,
+			) ?;
+
 		let mut input =
 			Cursor::new (
-				try! (
-					repo.read_and_expand_backup (
-						output,
-						backup_name)));
+				input_bytes);
 
 		let mut coded_input_stream =
 			CodedInputStream::new (

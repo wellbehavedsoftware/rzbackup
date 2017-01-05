@@ -15,6 +15,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
+use crypto::sha2::Sha256;
+
 use futures;
 use futures::BoxFuture;
 use futures::Complete;
@@ -586,7 +590,7 @@ impl Repository {
 		& self,
 		output: & Output,
 		backup_name: & str,
-	) -> Result <Vec <u8>, String> {
+	) -> Result <(Vec <u8>, [u8; 32]), String> {
 
 		try! (
 			self.load_indexes (
@@ -630,15 +634,19 @@ impl Repository {
 				Cursor::new (
 					Vec::new ());
 
-			try! (
-				self.follow_instructions (
-					& mut input,
-					& mut temp_output,
-					& |count| {
-						if count & 0xf == 0xf {
-							output.status_tick ();
-						}
-					}));
+			let mut sha1_digest =
+				Sha1::new ();
+
+			self.follow_instructions (
+				& mut input,
+				& mut temp_output,
+				& mut sha1_digest,
+				& |count| {
+					if count & 0xf == 0xf {
+						output.status_tick ();
+					}
+				},
+			) ?;
 
 			input =
 				Cursor::new (
@@ -648,7 +656,13 @@ impl Repository {
 
 		output.status_done ();
 
-		Ok (input.into_inner ())
+		Ok (
+			(
+				input.into_inner (),
+				to_array_32 (
+					backup_info.get_sha256 ()),
+			)
+		)
 
 	}
 
@@ -676,12 +690,15 @@ impl Repository {
 
 		}
 
+		let (input_bytes, checksum) =
+			self.read_and_expand_backup (
+				output,
+				backup_name,
+			) ?;
+
 		let mut input =
 			Cursor::new (
-				try! (
-					self.read_and_expand_backup (
-						output,
-						backup_name)));
+				input_bytes);
 
 		output.status_format (
 			format_args! (
@@ -690,15 +707,39 @@ impl Repository {
 
 		// restore backup
 
-		try! (
-			self.follow_instructions (
-				& mut input,
-				target,
-				& |count| {
-					if count & 0x7f == 0x00 {
-						output.status_tick ();
-					}
-				}));
+		let mut sha256_sum =
+			Sha256::new ();
+
+		self.follow_instructions (
+			& mut input,
+			target,
+			& mut sha256_sum,
+			& |count| {
+				if count & 0x7f == 0x00 {
+					output.status_tick ();
+				}
+			},
+		) ?;
+
+		// verify checksum
+
+		let mut sha256_sum_bytes: [u8; 32] =
+			[0u8; 32];
+
+		sha256_sum.result (
+			& mut sha256_sum_bytes);
+
+		if checksum != sha256_sum_bytes {
+
+			return Err (
+				format! (
+					"Expected sha256 checksum {} but calculated {}",
+					checksum.to_hex (),
+					sha256_sum_bytes.to_hex ()));
+
+		}
+
+		// done
 
 		output.status_done ();
 
@@ -827,6 +868,7 @@ impl Repository {
 		& self,
 		input: & mut Read,
 		target: & mut Write,
+		digest: & mut Digest,
 		progress: & Fn (u64),
 	) -> Result <(), String> {
 
@@ -997,13 +1039,13 @@ impl Repository {
 
 				JobTarget::Chunk (chunk_data) => {
 
-					try! (
-						io_result (
+					digest.input (
+						& chunk_data);
 
+					io_result (
 						target.write (
 							& chunk_data)
-
-					));
+					) ?;
 
 					progress (
 						count);

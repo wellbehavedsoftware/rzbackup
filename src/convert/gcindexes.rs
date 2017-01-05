@@ -6,6 +6,8 @@ use std::process;
 
 use clap;
 
+use crypto::sha1::Sha1;
+
 use output::Output;
 
 use protobuf::stream::CodedInputStream;
@@ -356,9 +358,13 @@ fn collect_chunks_from_backup (
 			Cursor::new (
 				Vec::new ());
 
+		let mut sha1_digest =
+			Sha1::new ();
+
 		repository.follow_instructions (
 			& mut input,
 			& mut temp_output,
+			& mut sha1_digest,
 			& |_count| (),
 		) ?;
 
