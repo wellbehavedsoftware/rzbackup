@@ -5,18 +5,30 @@ use clap;
 
 use output::Output;
 
-use rand;
-use rand::Rng;
-
-use rustc_serialize::hex::ToHex;
-
 use ::IndexEntry;
 use ::Repository;
 use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
 use ::read::*;
-use ::write::*;
+
+pub fn balance_indexes_command (
+) -> Box <Command> {
+
+	Box::new (
+		BalanceIndexesCommand {},
+	)
+
+}
+
+pub struct BalanceIndexesArguments {
+	repository_path: PathBuf,
+	password_file_path: Option <PathBuf>,
+	bundles_per_index: u64,
+}
+
+pub struct BalanceIndexesCommand {
+}
 
 pub fn balance_indexes (
 	output: & Output,
@@ -151,109 +163,92 @@ pub fn balance_indexes (
 
 }
 
-fn flush_index_entries (
-	repository: & Repository,
-	temp_files: & mut TempFileManager,
-	entries_buffer: & mut Vec <IndexEntry>,
-) -> Result <(), String> {
+impl CommandArguments for BalanceIndexesArguments {
 
-	let new_index_bytes: Vec <u8> =
-		rand::thread_rng ()
-			.gen_iter::<u8> ()
-			.take (24)
-			.collect ();
+	fn perform (
+		& self,
+		output: & Output,
+	) -> Result <(), String> {
 
-	let new_index_name: String =
-		new_index_bytes.to_hex ();
+		balance_indexes (
+			output,
+			self,
+		)
 
-	let new_index_path =
-		repository.path ()
-			.join ("index")
-			.join (new_index_name);
-
-	let new_index_file =
-		Box::new (
-			temp_files.create (
-				new_index_path,
-			) ?
-		);
-
-	write_index (
-		new_index_file,
-		repository.encryption_key (),
-		& entries_buffer,
-	) ?;
-
-	entries_buffer.clear ();
-
-	Ok (())
+	}
 
 }
 
-pub struct BalanceIndexesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	bundles_per_index: u64,
-}
+impl Command for BalanceIndexesCommand {
 
-pub fn balance_indexes_subcommand <'a, 'b> (
-) -> clap::App <'a, 'b> {
+	fn name (& self) -> & 'static str {
+		"balance-indexes"
+	}
 
-	clap::SubCommand::with_name ("balance-indexes")
-		.about ("rewrites index files so they are a consistent size")
+	fn clap_subcommand <'a: 'b, 'b> (
+		& self,
+	) -> clap::App <'a, 'b> {
 
-		.arg (
-			clap::Arg::with_name ("repository")
+		clap::SubCommand::with_name ("balance-indexes")
+			.about ("rewrites index files so they are a consistent size")
 
-			.long ("repository")
-			.value_name ("REPOSITORY")
-			.required (true)
-			.help ("Path to the repository, used to obtain encryption key")
+			.arg (
+				clap::Arg::with_name ("repository")
 
-		)
+				.long ("repository")
+				.value_name ("REPOSITORY")
+				.required (true)
+				.help ("Path to the repository, used to obtain encryption key")
 
-		.arg (
-			clap::Arg::with_name ("password-file")
+			)
 
-			.long ("password-file")
-			.value_name ("PASSWORD-FILE")
-			.required (false)
-			.help ("Path to the password file")
+			.arg (
+				clap::Arg::with_name ("password-file")
 
-		)
+				.long ("password-file")
+				.value_name ("PASSWORD-FILE")
+				.required (false)
+				.help ("Path to the password file")
 
-		.arg (
-			clap::Arg::with_name ("bundles-per-index")
+			)
 
-			.long ("bundles-per-index")
-			.value_name ("BUNDLES-PER-INDEX")
-			.default_value ("16384")
-			.help ("Bundles per index")
+			.arg (
+				clap::Arg::with_name ("bundles-per-index")
 
-		)
+				.long ("bundles-per-index")
+				.value_name ("BUNDLES-PER-INDEX")
+				.default_value ("16384")
+				.help ("Bundles per index")
 
-}
+			)
 
-pub fn balance_indexes_arguments_parse (
-	clap_matches: & clap::ArgMatches,
-) -> BalanceIndexesArguments {
+	}
 
-	BalanceIndexesArguments {
+	fn clap_arguments_parse (
+		& self,
+		clap_matches: & clap::ArgMatches,
+	) -> Box <CommandArguments> {
 
-		repository_path:
-			args::path_required (
-				& clap_matches,
-				"repository"),
+		let arguments = BalanceIndexesArguments {
 
-		password_file_path:
-			args::path_optional (
-				& clap_matches,
-				"password-file"),
+			repository_path:
+				args::path_required (
+					& clap_matches,
+					"repository"),
 
-		bundles_per_index:
-			args::u64_required (
-				& clap_matches,
-				"bundles-per-index"),
+			password_file_path:
+				args::path_optional (
+					& clap_matches,
+					"password-file"),
+
+			bundles_per_index:
+				args::u64_required (
+					& clap_matches,
+					"bundles-per-index"),
+
+		};
+
+		Box::new (arguments)
 
 	}
 

@@ -15,6 +15,9 @@
 
 #![ allow (unused_parens) ]
 
+#[ macro_use ]
+extern crate lazy_static;
+
 extern crate adler32;
 extern crate byteorder;
 extern crate clap;
@@ -24,6 +27,7 @@ extern crate futures_cpupool;
 extern crate libc;
 extern crate lru_cache;
 extern crate minilzo;
+extern crate num_cpus;
 extern crate output;
 extern crate protobuf;
 extern crate rand;
@@ -34,10 +38,18 @@ extern crate rustc_serialize;
 pub mod misc;
 
 #[ doc (hidden) ]
+pub mod client;
+
+#[ doc (hidden) ]
+pub mod commands;
+
+#[ doc (hidden) ]
 pub mod convert;
 
+#[ doc (hidden) ]
+pub mod server;
+
 mod compress;
-mod server;
 mod zbackup;
 
 pub use zbackup::crypto::CryptoReader;

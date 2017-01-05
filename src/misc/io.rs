@@ -16,10 +16,10 @@ pub fn io_result <Type> (
 }
 
 pub fn io_result_with_prefix <
-	Prefix: Into <String>,
+	PrefixFunction: Fn () -> String,
 	Type,
 > (
-	prefix: Prefix,
+	prefix_function: PrefixFunction,
 	result: Result <Type, io::Error>,
 ) -> Result <Type, String> {
 
@@ -28,7 +28,7 @@ pub fn io_result_with_prefix <
 
 		format! (
 			"{}{}",
-			prefix.into (),
+			prefix_function (),
 			io_error.description ())
 
 	)

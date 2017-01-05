@@ -101,6 +101,7 @@ pub fn write_bundle <
 	) ?;
 
 	write_adler (
+		|| format! (""),
 		& mut target,
 	) ?;
 
@@ -166,6 +167,7 @@ pub fn write_bundle <
 	) ?;
 
 	write_adler (
+		|| format! (""),
 		& mut target,
 	) ?;
 
@@ -263,6 +265,7 @@ pub fn write_index (
 	) ?;
 
 	write_adler (
+		|| format! (""),
 		& mut target,
 	) ?;
 
@@ -360,7 +363,10 @@ pub fn wrap_writer (
 
 }
 
-fn write_adler (
+fn write_adler <
+	PrefixFunction: Fn () -> String,
+> (
+	prefix_function: PrefixFunction,
 	adler_write: & mut AdlerWrite,
 ) -> Result <(), String> {
 
@@ -370,7 +376,9 @@ fn write_adler (
 		adler_write.hash ();
 
 	io_result_with_prefix (
-		"Error writing adler32 checksum: ",
+		|| format! (
+			"{}Error writing adler32 checksum: ",
+			prefix_function ()),
 		adler_write.write_u32::<LittleEndian> (
 			calculated_hash),
 	) ?;

@@ -21,20 +21,23 @@ use zbackup::data::*;
 use zbackup::proto;
 
 pub fn read_storage_info <PathRef: AsRef <Path>> (
-	path: PathRef,
+	info_path: PathRef,
 ) -> Result <proto::StorageInfo, String> {
+
+	let info_path = info_path.as_ref ();
 
 	let storage_info: proto::StorageInfo;
 
 	// open file
 
-	let source = try! (
-
-		io_result (
+	let source =
+		io_result_with_prefix (
+			|| format! (
+				"Error opening {}: ",
+				info_path.to_string_lossy ()),
 			File::open (
-				path))
-
-	);
+				info_path),
+		) ?;
 
 	let mut source =
 		AdlerRead::new (
@@ -76,9 +79,12 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 
 	// verify checksum
 
-	try! (
-		verify_adler_and_eof (
-			source));
+	verify_adler_and_eof (
+		|| format! (
+			"Error reading {}: ",
+			info_path.to_string_lossy ()),
+		source,
+	) ?;
 
 	// return
 
@@ -87,20 +93,25 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 }
 
 pub fn read_backup_file <PathRef: AsRef <Path>> (
-	path: PathRef,
+	backup_path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <proto::BackupInfo, String> {
+
+	let backup_path = backup_path.as_ref ();
 
 	let backup_info: proto::BackupInfo;
 
 	// open file
 
 	let mut source =
-		try! (
-			io_result (
-				open_file_with_crypto_and_adler (
-					path,
-					key)));
+		io_result_with_prefix (
+			|| format! (
+				"Error reading {}: ",
+				backup_path.to_string_lossy ()),
+			open_file_with_crypto_and_adler (
+				backup_path,
+				key),
+		) ?;
 
 	{
 
@@ -111,10 +122,10 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 		// read file header
 
 		let file_header: proto::FileHeader =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| "file header".to_string ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "file header".to_string (),
+			) ?;
 
 		if file_header.get_version () != 1 {
 
@@ -127,18 +138,21 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 		// read backup info
 
 		backup_info =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| "backup info".to_string ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "backup info".to_string (),
+			) ?;
 
 	}
 
 	// verify checksum
 
-	try! (
-		verify_adler_and_eof (
-			source));
+	verify_adler_and_eof (
+		|| format! (
+			"Error reading {}: ",
+			backup_path.to_string_lossy ()),
+		source,
+	) ?;
 
 	// return
 
@@ -147,9 +161,11 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 }
 
 pub fn read_index <PathRef: AsRef <Path>> (
-	path: PathRef,
+	index_path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <Vec <IndexEntry>, String> {
+
+	let index_path = index_path.as_ref ();
 
 	let mut index_entries: Vec <IndexEntry> =
 		vec! ();
@@ -159,9 +175,11 @@ pub fn read_index <PathRef: AsRef <Path>> (
 	let mut source =
 		try! (
 			io_result_with_prefix (
-				"Error opening file: ",
+				|| format! (
+					"Error opening {}: ",
+					index_path.to_string_lossy ()),
 				open_file_with_crypto_and_adler (
-					path,
+					index_path,
 					key)));
 
 	{
@@ -222,31 +240,37 @@ pub fn read_index <PathRef: AsRef <Path>> (
 
 	// verify checksum
 
-	try! (
-		verify_adler_and_eof (
-			source));
+	verify_adler_and_eof (
+		|| format! (
+			"Error reading {}: ",
+			index_path.to_string_lossy ()),
+		source,
+	) ?;
 
 	Ok (index_entries)
 
 }
 
 pub fn read_bundle_info <PathRef: AsRef <Path>> (
-	path: PathRef,
+	bundle_path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <proto::BundleInfo, String> {
+
+	let bundle_path = bundle_path.as_ref ();
 
 	let bundle_info: proto::BundleInfo;
 
 	// open file
 
-	let mut source = try! (
-
-		io_result (
+	let mut source =
+		io_result_with_prefix (
+			|| format! (
+				"Error reading {}: ",
+				bundle_path.to_string_lossy ()),
 			open_file_with_crypto_and_adler (
-				path,
-				key))
-
-	);
+				bundle_path,
+				key),
+		) ?;
 
 	{
 
@@ -257,16 +281,22 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 		// read bundle file header
 
 		let bundle_file_header: proto::BundleFileHeader =
-			read_message (
-				& mut coded_input_stream,
-				|| "bundle file header".to_string (),
+			string_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
+				read_message (
+					& mut coded_input_stream,
+					|| "bundle file header".to_string (),
+				),
 			) ?;
 
 		if bundle_file_header.get_version () != 1 {
 
 			return Err (
 				format! (
-					"Unsupported bundle file version {}",
+					"Error reading {}: Unsupported bundle file version {}",
+					bundle_path.to_string_lossy (),
 					bundle_file_header.get_version ()));
 
 		}
@@ -275,7 +305,8 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 
 			return Err (
 				format! (
-					"Unsupported bundle file compression method {}",
+					"Error reading {}: Unsupported bundle file compression method {}",
+					bundle_path.to_string_lossy (),
 					bundle_file_header.get_compression_method ()));
 
 		}
@@ -283,9 +314,14 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 		// read bundle info
 
 		bundle_info =
-			read_message (
-				& mut coded_input_stream,
-				|| "bundle info".to_owned (),
+			string_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
+				read_message (
+					& mut coded_input_stream,
+					|| "bundle info".to_owned (),
+				),
 			) ?;
 
 	}
@@ -294,6 +330,9 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 
 	try! (
 		verify_adler (
+			|| format! (
+				"Error reading {}: ",
+				bundle_path.to_string_lossy ()),
 			& mut source));
 
 	Ok (bundle_info)
@@ -301,23 +340,26 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 }
 
 pub fn read_bundle <PathRef: AsRef <Path>> (
-	path: PathRef,
+	bundle_path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
 ) -> Result <Vec <(ChunkId, Vec <u8>)>, String> {
+
+	let bundle_path = bundle_path.as_ref ();
 
 	let bundle_info: proto::BundleInfo;
 	let mut chunks: Vec <(ChunkId, Vec <u8>)>;
 
 	// open file
 
-	let mut source = try! (
-
-		io_result (
+	let mut source =
+		io_result_with_prefix (
+			|| format! (
+				"Error opening {}: ",
+				bundle_path.to_string_lossy ()),
 			open_file_with_crypto_and_adler (
-				path,
-				key))
-
-	);
+				bundle_path,
+				key),
+		) ?;
 
 	{
 
@@ -363,9 +405,12 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 	// verify checksum
 
-	try! (
-		verify_adler (
-			& mut source));
+	verify_adler (
+		|| format! (
+			"Error reading {}: ",
+			bundle_path.to_string_lossy ()),
+		& mut source,
+	) ?;
 
 	{
 
@@ -426,9 +471,12 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 	// verify checksum
 
-	try! (
-		verify_adler_and_eof (
-			source));
+	verify_adler_and_eof (
+		|| format! (
+			"Error reading {}: ",
+			bundle_path.to_string_lossy ()),
+		source,
+	) ?;
 
 	Ok (chunks)
 
@@ -527,7 +575,10 @@ fn open_file_with_crypto_and_adler <
 
 }
 
-fn verify_adler (
+fn verify_adler <
+	PrefixFunction: Fn () -> String,
+> (
+	prefix_function: PrefixFunction,
 	adler_read: & mut AdlerRead,
 ) -> Result <(), String> {
 
@@ -539,7 +590,9 @@ fn verify_adler (
 	let expected_hash = try! (
 
 		io_result_with_prefix (
-			"Error reading adler32 checksum: ",
+			|| format! (
+				"{}Error reading adler32 checksum: ",
+				prefix_function ()),
 			adler_read.read_u32::<LittleEndian> ())
 
 	);
@@ -548,8 +601,9 @@ fn verify_adler (
 
 		return Err (
 			format! (
-				"Adler32 hash calculated {} but expected {}, at position \
+				"{}Adler32 hash calculated {} but expected {}, at position \
 				0x{:x}",
+				prefix_function (),
 				calculated_hash,
 				expected_hash,
 				adler_read.byte_count - 4));
@@ -562,32 +616,37 @@ fn verify_adler (
 
 }
 
-fn verify_adler_and_eof (
+fn verify_adler_and_eof <
+	PrefixFunction: Fn () -> String,
+> (
+	prefix_function: PrefixFunction,
 	mut adler_read: AdlerRead,
 ) -> Result <(), String> {
 
-	try! (
-		verify_adler (
-			& mut adler_read));
+	verify_adler (
+		& prefix_function,
+		& mut adler_read,
+	) ?;
 
 	// verify end of file
 
 	let mut byte_buffer: [u8; 1] = [0u8; 1];
 
-	let bytes_read = try! (
-
+	let bytes_read =
 		io_result_with_prefix (
-			"Error checking for end of file: ",
+			|| format! (
+				"{}Error checking for end of file: ",
+				& prefix_function ()),
 			adler_read.read (
-				& mut byte_buffer))
-
-	);
+				& mut byte_buffer),
+		) ?;
 
 	if bytes_read != 0 {
 
 		return Err (
 			format! (
-				"Extra data at end of file"));
+				"{}Extra data at end of file",
+				prefix_function ()));
 
 	}
 

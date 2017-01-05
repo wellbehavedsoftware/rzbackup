@@ -27,7 +27,7 @@ impl TempFileManager {
 		if ! temp_dir_path.exists () {
 
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error creating tmp directory {}: ",
 					temp_dir_path.clone ().to_string_lossy ()),
 				fs::create_dir (
@@ -62,11 +62,11 @@ impl TempFileManager {
 
 		let temp_file =
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error creating temporary file {}: ",
 					temp_file_path.to_string_lossy ()),
 				File::create (
-					temp_file_path),
+					& temp_file_path),
 			) ?;
 
 		self.temp_files.push (
@@ -101,7 +101,7 @@ impl TempFileManager {
 
 			let temp_file = (
 				io_result_with_prefix (
-					format! (
+					|| format! (
 						"Error syncing temp file {}: ",
 						temp_file_name),
 					File::open (
@@ -110,7 +110,7 @@ impl TempFileManager {
 			) ?;
 
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error syncing temp file {}: ",
 					temp_file_name),
 				temp_file.sync_all ()
@@ -127,7 +127,7 @@ impl TempFileManager {
 				target_path.parent ().unwrap ();
 
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error creating target directory {}: ",
 					parent_dir.to_string_lossy ()),
 				fs::create_dir_all (
@@ -135,7 +135,7 @@ impl TempFileManager {
 			) ?;
 
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error renaming temp file {} to {}: ",
 					temp_file_name,
 					target_path.to_string_lossy ()),
@@ -154,7 +154,7 @@ impl TempFileManager {
 		for delete_file_name in self.delete_files.iter () {
 
 			io_result_with_prefix (
-				format! (
+				|| format! (
 					"Error deleting {}: ",
 					delete_file_name.to_string_lossy ()),
 				fs::remove_file (

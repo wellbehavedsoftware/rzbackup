@@ -1,6 +1,6 @@
 mod server;
 mod handler;
 
-pub use server::server::run_server;
+pub use self::server::*;
 
 // ex: noet ts=4 filetype=rust

@@ -19,11 +19,23 @@ use ::write::*;
 use ::zbackup::data::*;
 use ::zbackup::proto;
 
+pub fn balance_bundles_command (
+) -> Box <Command> {
+
+	Box::new (
+		BalanceBundlesCommand {},
+	)
+
+}
+
 pub struct BalanceBundlesArguments {
 	repository_path: PathBuf,
 	password_file_path: Option <PathBuf>,
 	chunks_per_bundle: u64,
 	fill_factor: u64,
+}
+
+pub struct BalanceBundlesCommand {
 }
 
 pub fn balance_bundles (
@@ -409,91 +421,117 @@ fn flush_bundle (
 
 }
 
-pub fn balance_bundles_subcommand <'a, 'b> (
-) -> clap::App <'a, 'b> {
+impl CommandArguments for BalanceBundlesArguments {
 
-	clap::SubCommand::with_name ("balance-bundles")
-		.about ("rewrites bundles so they are a consistent size")
+	fn perform (
+		& self,
+		output: & Output,
+	) -> Result <(), String> {
 
-		.arg (
-			clap::Arg::with_name ("repository")
-
-			.long ("repository")
-			.value_name ("REPOSITORY")
-			.required (true)
-			.help ("Path to the repository, used to obtain encryption key")
-
+		balance_bundles (
+			output,
+			self,
 		)
-
-		.arg (
-			clap::Arg::with_name ("password-file")
-
-			.long ("password-file")
-			.value_name ("PASSWORD-FILE")
-			.required (false)
-			.help ("Path to the password file")
-
-		)
-
-		.arg (
-			clap::Arg::with_name ("chunks-per-bundle")
-
-			.long ("chunks-per-bundle")
-			.value_name ("CHUNKS-PER-BUNDLE")
-			.default_value ("256")
-			.help ("Chunks per bundle")
-
-		)
-
-		.arg (
-			clap::Arg::with_name ("fill-factor")
-
-			.long ("fill-factor")
-			.value_name ("FILL-FACTOR")
-			.default_value ("25")
-			.help ("Minimum fill factor as percentage")
-
-		)
-
-}
-
-pub fn balance_bundles_arguments_parse (
-	clap_matches: & clap::ArgMatches,
-) -> BalanceBundlesArguments {
-
-	let arguments = BalanceBundlesArguments {
-
-		repository_path:
-			args::path_required (
-				& clap_matches,
-				"repository"),
-
-		password_file_path:
-			args::path_optional (
-				& clap_matches,
-				"password-file"),
-
-		chunks_per_bundle:
-			args::u64_required (
-				& clap_matches,
-				"chunks-per-bundle"),
-
-		fill_factor:
-			args::u64_required (
-				& clap_matches,
-				"fill-factor"),
-
-	};
-
-	if arguments.fill_factor > 100 {
-
-		args::error_exit (
-			format! (
-				"Value of --fill-factor must be between 0 and 100"));
 
 	}
 
-	arguments
+}
+
+impl Command for BalanceBundlesCommand {
+
+	fn name (& self) -> & 'static str {
+		"balance-bundles"
+	}
+
+	fn clap_subcommand <'a: 'b, 'b> (
+		& self,
+	) -> clap::App <'a, 'b> {
+
+		clap::SubCommand::with_name ("balance-bundles")
+			.about ("rewrites bundles so they are a consistent size")
+
+			.arg (
+				clap::Arg::with_name ("repository")
+
+				.long ("repository")
+				.value_name ("REPOSITORY")
+				.required (true)
+				.help ("Path to the repository, used to obtain encryption key")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("password-file")
+
+				.long ("password-file")
+				.value_name ("PASSWORD-FILE")
+				.required (false)
+				.help ("Path to the password file")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("chunks-per-bundle")
+
+				.long ("chunks-per-bundle")
+				.value_name ("CHUNKS-PER-BUNDLE")
+				.default_value ("256")
+				.help ("Chunks per bundle")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("fill-factor")
+
+				.long ("fill-factor")
+				.value_name ("FILL-FACTOR")
+				.default_value ("25")
+				.help ("Minimum fill factor as percentage")
+
+			)
+
+	}
+
+	fn clap_arguments_parse (
+		& self,
+		clap_matches: & clap::ArgMatches,
+	) -> Box <CommandArguments> {
+
+		let arguments = BalanceBundlesArguments {
+
+			repository_path:
+				args::path_required (
+					& clap_matches,
+					"repository"),
+
+			password_file_path:
+				args::path_optional (
+					& clap_matches,
+					"password-file"),
+
+			chunks_per_bundle:
+				args::u64_required (
+					& clap_matches,
+					"chunks-per-bundle"),
+
+			fill_factor:
+				args::u64_required (
+					& clap_matches,
+					"fill-factor"),
+
+		};
+
+		if arguments.fill_factor > 100 {
+
+			args::error_exit (
+				format! (
+					"Value of --fill-factor must be between 0 and 100"));
+
+		}
+
+		Box::new (arguments)
+
+	}
 
 }
 

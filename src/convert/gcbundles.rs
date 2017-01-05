@@ -17,9 +17,21 @@ use ::read::*;
 use ::write::*;
 use ::zbackup::data::*;
 
+pub fn gc_bundles_command (
+) -> Box <Command> {
+
+	Box::new (
+		GcBundlesCommand {},
+	)
+
+}
+
 pub struct GcBundlesArguments {
 	repository_path: PathBuf,
 	password_file_path: Option <PathBuf>,
+}
+
+pub struct GcBundlesCommand {
 }
 
 pub fn gc_bundles (
@@ -342,49 +354,75 @@ pub fn gc_bundles (
 
 }
 
-pub fn gc_bundles_subcommand <'a, 'b> (
-) -> clap::App <'a, 'b> {
+impl CommandArguments for GcBundlesArguments {
 
-	clap::SubCommand::with_name ("gc-bundles")
-		.about ("Removes chunks from bundles which are not in any index")
+	fn perform (
+		& self,
+		output: & Output,
+	) -> Result <(), String> {
 
-		.arg (
-			clap::Arg::with_name ("repository")
-
-			.long ("repository")
-			.value_name ("REPOSITORY")
-			.required (true)
-			.help ("Path to the repository")
-
+		gc_bundles (
+			output,
+			self,
 		)
 
-		.arg (
-			clap::Arg::with_name ("password-file")
-
-			.long ("password-file")
-			.value_name ("PASSWORD-FILE")
-			.required (false)
-			.help ("Path to the password file")
-
-		)
+	}
 
 }
 
-pub fn gc_bundles_arguments_parse (
-	clap_matches: & clap::ArgMatches,
-) -> GcBundlesArguments {
+impl Command for GcBundlesCommand {
 
-	GcBundlesArguments {
+	fn name (& self) -> & 'static str {
+		"gc-bundles"
+	}
 
-		repository_path:
-			args::path_required (
-				& clap_matches,
-				"repository"),
+	fn clap_subcommand <'a: 'b, 'b> (
+		& self,
+	) -> clap::App <'a, 'b> {
 
-		password_file_path:
-			args::path_optional (
-				& clap_matches,
-				"password-file"),
+		clap::SubCommand::with_name ("gc-bundles")
+			.about ("Removes chunks from bundles which are not in any index")
+
+			.arg (
+				clap::Arg::with_name ("repository")
+
+				.long ("repository")
+				.value_name ("REPOSITORY")
+				.required (true)
+				.help ("Path to the repository")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("password-file")
+
+				.long ("password-file")
+				.value_name ("PASSWORD-FILE")
+				.required (false)
+				.help ("Path to the password file")
+
+			)
+
+	}
+
+	fn clap_arguments_parse (
+		& self,
+		clap_matches: & clap::ArgMatches,
+	) -> Box <CommandArguments> {
+
+		Box::new (GcBundlesArguments {
+
+			repository_path:
+				args::path_required (
+					& clap_matches,
+					"repository"),
+
+			password_file_path:
+				args::path_optional (
+					& clap_matches,
+					"password-file"),
+
+		})
 
 	}
 

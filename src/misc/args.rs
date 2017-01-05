@@ -32,6 +32,19 @@ pub fn u64_required (
 
 }
 
+pub fn string_required (
+	matches: & clap::ArgMatches,
+	name: & str,
+) -> String {
+
+	String::from (
+		matches.value_of (
+			name,
+		).unwrap ()
+	)
+
+}
+
 pub fn path_required (
 	matches: & clap::ArgMatches,
 	name: & str,

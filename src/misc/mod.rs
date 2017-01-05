@@ -1,9 +1,11 @@
 pub mod args;
 
+mod command;
 mod error;
 mod io;
 mod protobuf;
 
+pub use self::command::*;
 pub use self::error::*;
 pub use self::io::*;
 pub use self::protobuf::*;

@@ -3,6 +3,7 @@
 extern crate num_cpus;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::LinkedList;
 use std::fs;
 use std::io::Cursor;
@@ -27,6 +28,7 @@ use output::Output;
 
 use protobuf::stream::CodedInputStream;
 
+use rustc_serialize::hex::FromHex;
 use rustc_serialize::hex::ToHex;
 
 use misc::*;
@@ -352,6 +354,61 @@ impl Repository {
 			>;
 
 		output.status (
+			"Scanning bundles ...");
+
+		let mut bundle_ids: HashSet <BundleId> =
+			HashSet::new ();
+
+		for prefix in (0 .. 256).map (
+			|byte| [ byte as u8 ].to_hex ()
+		) {
+
+			let bundles_directory =
+				self.data.path
+					.join ("bundles")
+					.join (prefix);
+
+			if ! bundles_directory.exists () {
+				continue;
+			}
+
+			for dir_entry_result in (
+				io_result (
+					fs::read_dir (
+						bundles_directory))
+			) ? {
+
+				let dir_entry = (
+					io_result (
+						dir_entry_result)
+				) ?;
+
+				let file_name =
+					dir_entry.file_name ().to_str ().unwrap ().to_owned ();
+
+				let bundle_id =
+					to_array_24 (
+						& file_name.from_hex ().unwrap ());
+
+				bundle_ids.insert (
+					bundle_id);
+
+			}
+
+		}
+
+		output.status_done ();
+
+		output.message_format (
+			format_args! (
+				"Found {} bundle files",
+				bundle_ids.len ()));
+
+		let bundle_ids =
+			Arc::new (
+				bundle_ids);
+
+		output.status (
 			"Loading indexes ...");
 
 		// start tasks to load each index
@@ -382,6 +439,9 @@ impl Repository {
 			let self_clone =
 				self.clone ();
 
+			let bundle_ids =
+				bundle_ids.clone ();
+
 			index_result_futures.push (
 				self.cpu_pool.spawn_fn (
 					move || {
@@ -405,6 +465,14 @@ impl Repository {
 
 				for (index_bundle_header, bundle_info) in index {
 
+					let bundle_id =
+						to_array_24 (
+							index_bundle_header.get_id ());
+
+					if ! bundle_ids.contains (& bundle_id) {
+						continue;
+					}
+
 					for chunk_record in bundle_info.get_chunk_record () {
 
 						entries.push (
@@ -415,8 +483,7 @@ impl Repository {
 									chunk_record.get_id ()),
 
 							bundle_id:
-								to_array_24 (
-									index_bundle_header.get_id ()),
+								bundle_id,
 
 							size:
 								chunk_record.get_size () as u64,

@@ -24,9 +24,21 @@ use ::write::*;
 use ::zbackup::data::*;
 use ::zbackup::proto;
 
+pub fn gc_indexes_command (
+) -> Box <Command> {
+
+	Box::new (
+		GcIndexesCommand {},
+	)
+
+}
+
 pub struct GcIndexesArguments {
 	repository_path: PathBuf,
 	password_file_path: Option <PathBuf>,
+}
+
+pub struct GcIndexesCommand {
 }
 
 pub fn gc_indexes (
@@ -410,49 +422,77 @@ fn collect_chunks_from_instructions (
 
 }
 
-pub fn gc_indexes_subcommand <'a, 'b> (
-) -> clap::App <'a, 'b> {
+impl CommandArguments for GcIndexesArguments {
 
-	clap::SubCommand::with_name ("gc-indexes")
-		.about ("Removes index entries which are not referenced by any backup")
+	fn perform (
+		& self,
+		output: & Output,
+	) -> Result <(), String> {
 
-		.arg (
-			clap::Arg::with_name ("repository")
-
-			.long ("repository")
-			.value_name ("REPOSITORY")
-			.required (true)
-			.help ("Path to the repository")
-
+		gc_indexes (
+			output,
+			self,
 		)
 
-		.arg (
-			clap::Arg::with_name ("password-file")
-
-			.long ("password-file")
-			.value_name ("PASSWORD-FILE")
-			.required (false)
-			.help ("Path to the password file")
-
-		)
+	}
 
 }
 
-pub fn gc_indexes_arguments_parse (
-	clap_matches: & clap::ArgMatches,
-) -> GcIndexesArguments {
+impl Command for GcIndexesCommand {
 
-	GcIndexesArguments {
+	fn name (& self) -> & 'static str {
+		"gc-indexes"
+	}
 
-		repository_path:
-			args::path_required (
-				& clap_matches,
-				"repository"),
+	fn clap_subcommand <'a: 'b, 'b> (
+		& self,
+	) -> clap::App <'a, 'b> {
 
-		password_file_path:
-			args::path_optional (
-				& clap_matches,
-				"password-file"),
+		clap::SubCommand::with_name ("gc-indexes")
+			.about ("Removes index entries which are not referenced by any backup")
+
+			.arg (
+				clap::Arg::with_name ("repository")
+
+				.long ("repository")
+				.value_name ("REPOSITORY")
+				.required (true)
+				.help ("Path to the repository")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("password-file")
+
+				.long ("password-file")
+				.value_name ("PASSWORD-FILE")
+				.required (false)
+				.help ("Path to the password file")
+
+			)
+
+	}
+
+	fn clap_arguments_parse (
+		& self,
+		clap_matches: & clap::ArgMatches,
+	) -> Box <CommandArguments> {
+
+		let arguments = GcIndexesArguments {
+
+			repository_path:
+				args::path_required (
+					& clap_matches,
+					"repository"),
+
+			password_file_path:
+				args::path_optional (
+					& clap_matches,
+					"password-file"),
+
+		};
+
+		Box::new (arguments)
 
 	}
 

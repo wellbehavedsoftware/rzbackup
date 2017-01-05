@@ -2,9 +2,16 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+use rand;
+use rand::Rng;
+
 use rustc_serialize::hex::ToHex;
 
+use ::Repository;
+use ::TempFileManager;
 use ::misc::*;
+use ::zbackup::data::*;
+use ::zbackup::write::*;
 
 pub fn scan_index_files <
 	RepositoryPath: AsRef <Path>,
@@ -191,6 +198,45 @@ pub fn scan_bundle_files <
 	}
 
 	Ok (bundle_files)
+
+}
+
+pub fn flush_index_entries (
+	repository: & Repository,
+	temp_files: & mut TempFileManager,
+	entries_buffer: & mut Vec <IndexEntry>,
+) -> Result <(), String> {
+
+	let new_index_bytes: Vec <u8> =
+		rand::thread_rng ()
+			.gen_iter::<u8> ()
+			.take (24)
+			.collect ();
+
+	let new_index_name: String =
+		new_index_bytes.to_hex ();
+
+	let new_index_path =
+		repository.path ()
+			.join ("index")
+			.join (new_index_name);
+
+	let new_index_file =
+		Box::new (
+			temp_files.create (
+				new_index_path,
+			) ?
+		);
+
+	write_index (
+		new_index_file,
+		repository.encryption_key (),
+		& entries_buffer,
+	) ?;
+
+	entries_buffer.clear ();
+
+	Ok (())
 
 }
 
