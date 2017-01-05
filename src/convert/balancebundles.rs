@@ -23,6 +23,7 @@ pub struct BalanceBundlesArguments {
 	repository_path: PathBuf,
 	password_file_path: Option <PathBuf>,
 	chunks_per_bundle: u64,
+	fill_factor: u64,
 }
 
 pub fn balance_bundles (
@@ -89,6 +90,9 @@ pub fn balance_bundles (
 	let mut read_index_size: u64 = 0;
 	let mut unbalanced_chunks_count: u64 = 0;
 
+	let minimum_chunk_count: u64 =
+		arguments.chunks_per_bundle * arguments.fill_factor / 100;
+
 	for (old_index_name, old_index_size) in old_indexes {
 
 		let old_index_path =
@@ -111,7 +115,7 @@ pub fn balance_bundles (
 			).filter (
 				|& chunk_count|
 
-				chunk_count != arguments.chunks_per_bundle
+				chunk_count < minimum_chunk_count
 
 			).sum ();
 
@@ -182,7 +186,9 @@ pub fn balance_bundles (
 				unbalanced_bundle_id.to_hex ();
 
 			if unbalanced_index_bundle_info.get_chunk_record ().len () as u64
-				== arguments.chunks_per_bundle {
+				>= minimum_chunk_count {
+
+				// bundle meets fill factor, nothing to do
 
 				new_index_entries.push (
 					(
@@ -192,6 +198,8 @@ pub fn balance_bundles (
 				);
 
 			} else {
+
+				// bundle does not meet fill factor, rebundle its contents
 
 				let unbalanced_bundle_path =
 					repository.path ()
@@ -432,8 +440,18 @@ pub fn balance_bundles_subcommand <'a, 'b> (
 
 			.long ("chunks-per-bundle")
 			.value_name ("CHUNKS-PER-BUNDLE")
-			.default_value ("1024")
+			.default_value ("256")
 			.help ("Chunks per bundle")
+
+		)
+
+		.arg (
+			clap::Arg::with_name ("fill-factor")
+
+			.long ("fill-factor")
+			.value_name ("FILL-FACTOR")
+			.default_value ("25")
+			.help ("Minimum fill factor as percentage")
 
 		)
 
@@ -443,7 +461,7 @@ pub fn balance_bundles_arguments_parse (
 	clap_matches: & clap::ArgMatches,
 ) -> BalanceBundlesArguments {
 
-	BalanceBundlesArguments {
+	let arguments = BalanceBundlesArguments {
 
 		repository_path:
 			args::path_required (
@@ -460,7 +478,22 @@ pub fn balance_bundles_arguments_parse (
 				& clap_matches,
 				"chunks-per-bundle"),
 
+		fill_factor:
+			args::u64_required (
+				& clap_matches,
+				"fill-factor"),
+
+	};
+
+	if arguments.fill_factor > 100 {
+
+		args::error_exit (
+			format! (
+				"Value of --fill-factor must be between 0 and 100"));
+
 	}
+
+	arguments
 
 }
 

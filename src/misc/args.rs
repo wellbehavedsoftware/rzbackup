@@ -21,20 +21,14 @@ pub fn u64_required (
 	matches.value_of (
 		name,
 	).unwrap ().parse::<u64> ().unwrap_or_else (
-		|_| {
+		|_|
 
-		clap::Error {
-
-			message: format! (
+		error_exit (
+			format! (
 				"Invalid value for --{}",
-				name),
+				name))
 
-			kind: clap::ErrorKind::InvalidValue,
-			info: None,
-
-		}.exit ();
-
-	})
+	)
 
 }
 
@@ -65,6 +59,18 @@ pub fn path_optional (
 			os_string)
 
 	)
+
+}
+
+pub fn error_exit (
+	message: String,
+) -> ! {
+
+	clap::Error {
+		message: message,
+		kind: clap::ErrorKind::InvalidValue,
+		info: None,
+	}.exit ()
 
 }
 
