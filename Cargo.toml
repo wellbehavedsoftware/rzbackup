@@ -39,5 +39,6 @@
 
 	name = "rzbackup"
 	path = "src/main.rs"
+	doc = false
 
 # ex: noet ts=4 filetype=cargo
