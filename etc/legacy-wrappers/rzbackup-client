@@ -1,0 +1,48 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
+dir=$(dirname "$0")
+
+HELP="
+Usage:
+
+  $0 client exit HOST:PORT
+  $0 client reindex HOST:PORT
+  $0 client restore HOST:PORT BACKUP-NAME
+"
+
+if test "$#" = 0; then
+	echo "$HELP" >&2
+	exit 1
+fi
+
+if test "$1" = "exit"; then
+
+	exec "$dir/rzbackup" client exit \
+		--server-address "$2"
+
+elif test "$1" = "reindex"; then
+
+	exec "$dir/rzbackup" client reindex \
+		--server-address "$2"
+
+elif test "$1" = "restore"; then
+
+	exec "$dir/rzbackup" client restore \
+		--server-address "$2" \
+		--backup-name "$3"
+
+else
+
+	(
+		echo
+		echo "Unrecognised command: $1"
+		echo "$HELP"
+	) >&2
+
+	exit 1
+
+fi	
+
+# ex: noet ts=4 filetype=sh

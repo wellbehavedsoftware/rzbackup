@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
+dir=$(dirname "$0")
+
+if test "$#" != 3; then
+	echo "Usage error" >&2
+	exit 1
+fi
+
+if test "$2"; then
+
+	exec "$dir/rzbackup" restore \
+		--repository "$1" \
+		--password-file "$2" \
+		--backup-name "$3"
+
+else
+
+	exec "$dir/rzbackup" restore \
+		--repository "$1" \
+		--backup-name "$3"
+
+fi
+
+# ex: noet ts=4 filetype=sh
