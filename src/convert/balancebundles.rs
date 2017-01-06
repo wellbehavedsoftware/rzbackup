@@ -1,5 +1,5 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::process;
 
 use clap;
 
@@ -43,6 +43,9 @@ pub fn balance_bundles (
 	arguments: & BalanceBundlesArguments,
 ) -> Result <(), String> {
 
+	let minimum_chunk_count: u64 =
+		arguments.chunks_per_bundle * arguments.fill_factor / 100;
+
 	// open repository
 
 	let repository =
@@ -71,46 +74,107 @@ pub fn balance_bundles (
 			& arguments.repository_path)
 	) ?;
 
+	output.message_format (
+		format_args! (
+			"Found {} index files",
+			old_index_ids_and_sizes.len ()));
+
+	// read indexes and discard any which are balanced
+
+	let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
+		Vec::new ();
+
+	let mut new_bundles_total: u64 = 0;
+
+	read_indexes_find_unbalanced (
+		output,
+		& repository,
+		& arguments,
+		minimum_chunk_count,
+		& old_index_ids_and_sizes,
+		& mut unbalanced_indexes,
+		& mut new_bundles_total,
+	) ?;
+
+	// balance bundles
+
+	balance_bundles_real (
+		output,
+		& repository,
+		& mut temp_files,
+		& arguments,
+		minimum_chunk_count,
+		& unbalanced_indexes,
+		new_bundles_total,
+	) ?;
+
+	Ok (())
+
+}
+
+fn read_indexes_find_unbalanced (
+	output: & Output,
+	repository: & Repository,
+	arguments: & BalanceBundlesArguments,
+	minimum_chunk_count: u64,
+	old_index_ids_and_sizes: & Vec <(IndexId, u64)>,
+	unbalanced_indexes: & mut Vec <(IndexId, Vec <IndexEntry>)>,
+	new_bundles_total: & mut u64,
+) -> Result <(), String> {
+
+	output.status (
+		"Reading indexes ...");
+
 	let total_index_size =
 		old_index_ids_and_sizes.iter ().map (
 			|& (_, old_index_size)|
 			old_index_size
 		).sum ();
 
-	output.message_format (
-		format_args! (
-			"Found {} index files with total size {}",
-			old_index_ids_and_sizes.len (),
-			total_index_size));
-
-	// read indexes and discard any which are balanced
-
-	output.status (
-		"Reading indexes ...");
-
-	let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
-		Vec::new ();
+	let mut seen_bundle_ids: HashSet <BundleId> =
+		HashSet::new ();
 
 	let mut read_index_size: u64 = 0;
 	let mut unbalanced_chunks_count: u64 = 0;
 
-	let minimum_chunk_count: u64 =
-		arguments.chunks_per_bundle * arguments.fill_factor / 100;
-
-	for (
+	for & (
 		old_index_id,
 		old_index_size,
-	) in old_index_ids_and_sizes {
+	) in old_index_ids_and_sizes.iter () {
 
 		let old_index_path =
 			repository.index_path (
 				old_index_id);
 
-		let old_index_entries = (
+		let old_index_entries =
 			read_index (
 				& old_index_path,
-				repository.encryption_key ())
-		) ?;
+				repository.encryption_key (),
+			) ?;
+
+		for & (
+			ref old_index_bundle_index_header,
+			ref _old_index_bundle_info,
+		) in old_index_entries.iter () {
+
+			let bundle_id =
+				to_array_24 (
+					old_index_bundle_index_header.get_id ());
+
+			if seen_bundle_ids.contains (
+				& bundle_id) {
+
+				return Err (
+					format! (
+						"Duplicated bundle id in index: {}",
+						bundle_id.to_hex ()));
+
+			}
+
+			seen_bundle_ids.insert (
+				bundle_id);
+
+		}
 
 		let old_index_unbalanced_chunks_count =
 			old_index_entries.iter ().map (
@@ -151,7 +215,7 @@ pub fn balance_bundles (
 
 	output.status_done ();
 
-	let new_bundles_total: u64 =
+	* new_bundles_total =
 		(unbalanced_chunks_count + arguments.chunks_per_bundle - 1)
 			/ arguments.chunks_per_bundle;
 
@@ -161,7 +225,19 @@ pub fn balance_bundles (
 			unbalanced_chunks_count,
 			new_bundles_total));
 
-	// balance bundles
+	Ok (())
+
+}
+
+fn balance_bundles_real (
+	output: & Output,
+	repository: & Repository,
+	temp_files: & mut TempFileManager,
+	arguments: & BalanceBundlesArguments,
+	minimum_chunk_count: u64,
+	unbalanced_indexes: & Vec <(IndexId, Vec <IndexEntry>)>,
+	new_bundles_total: u64,
+) -> Result <(), String> {
 
 	output.status (
 		"Reading bundles");
@@ -174,11 +250,15 @@ pub fn balance_bundles (
 	let mut new_index_entries: Vec <IndexEntry> =
 		Vec::new ();
 
-	for (unbalanced_index_id, unbalanced_index_entries)
-	in unbalanced_indexes {
+	for & (
+		ref unbalanced_index_id,
+		ref unbalanced_index_entries,
+	) in unbalanced_indexes {
 
-		for (unbalanced_index_bundle_header, unbalanced_index_bundle_info)
-		in unbalanced_index_entries {
+		for & (
+			ref unbalanced_index_bundle_header,
+			ref unbalanced_index_bundle_info,
+		) in unbalanced_index_entries {
 
 			let unbalanced_bundle_id =
 				unbalanced_index_bundle_header.get_id ().to_owned ();
@@ -193,8 +273,8 @@ pub fn balance_bundles (
 
 				new_index_entries.push (
 					(
-						unbalanced_index_bundle_header,
-						unbalanced_index_bundle_info,
+						unbalanced_index_bundle_header.clone (),
+						unbalanced_index_bundle_info.clone (),
 					)
 				);
 
@@ -232,7 +312,7 @@ pub fn balance_bundles (
 						flush_bundle (
 							output,
 							& repository,
-							& mut temp_files,
+							temp_files,
 							& mut balanced_chunks,
 							& mut new_index_entries,
 							new_bundles_count,
@@ -257,7 +337,7 @@ pub fn balance_bundles (
 
 		temp_files.delete (
 			repository.index_path (
-				unbalanced_index_id));
+				* unbalanced_index_id));
 
 	}
 
@@ -268,14 +348,14 @@ pub fn balance_bundles (
 	flush_bundle (
 		output,
 		& repository,
-		& mut temp_files,
+		temp_files,
 		& mut balanced_chunks,
 		& mut new_index_entries,
 		new_bundles_count,
 		new_bundles_total,
 	) ?;
 
-	process::exit (0);
+	Ok (())
 
 }
 
