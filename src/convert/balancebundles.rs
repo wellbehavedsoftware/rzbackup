@@ -46,7 +46,7 @@ pub fn balance_bundles (
 	// open repository
 
 	let repository =
-		io_result_with_prefix (
+		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
