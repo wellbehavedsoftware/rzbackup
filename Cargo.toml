@@ -22,6 +22,7 @@
 	adler32 = "0.3"
 	byteorder = "0.5"
 	clap = "2.13"
+	errno = "0.2"
 	futures = "0.1"
 	futures-cpupool = "0.1"
 	lazy_static = "0.2"

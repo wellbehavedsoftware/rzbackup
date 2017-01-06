@@ -1,13 +1,10 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-use std::process;
 
 use clap;
 
 use output::Output;
-
-use rustc_serialize::hex::FromHex;
 
 use ::Repository;
 use ::TempFileManager;
@@ -41,24 +38,24 @@ pub fn gc_bundles (
 
 	// open repository
 
-	let repository = (
-		Repository::open (
-			& output,
-			Repository::default_config (),
+	let repository =
+		string_result_with_prefix (
+			|| format! (
+				"Error opening repository {}: ",
+				arguments.repository_path.to_string_lossy ()),
+			Repository::open (
+				& output,
+				Repository::default_config (),
+				& arguments.repository_path,
+				arguments.password_file_path.clone ()),
+		) ?;
+
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
 			& arguments.repository_path,
-			arguments.password_file_path.clone ())
-	).unwrap_or_else (
-		|error| {
-
-		output.message_format (
-			format_args! (
-				"Error opening repository {}: {}",
-				arguments.repository_path.to_string_lossy (),
-				error));
-
-		process::exit (1);
-
-	});
+		) ?;
 
 	// get list of bundle files
 
@@ -74,26 +71,86 @@ pub fn gc_bundles (
 
 	// get list of index files
 
-	let index_files = (
-		scan_index_files (
+	let index_ids_and_sizes = (
+		scan_index_files_with_sizes (
 			& arguments.repository_path)
 	) ?;
 
 	output.message_format (
 		format_args! (
 			"Found {} index files",
-			index_files.len ()));
+			index_ids_and_sizes.len ()));
 
 	// read indexes
+
+	let mut all_index_entries: HashSet <(BundleId, ChunkId)> =
+		HashSet::new ();
+
+	get_all_index_entries (
+		output,
+		& repository,
+		& index_ids_and_sizes,
+		& mut all_index_entries,
+	) ?;
+
+	// read bundle headers
+
+	let mut bundles_to_compact: Vec <BundleId> =
+		Vec::new ();
+
+	let mut bundles_to_delete: Vec <BundleId> =
+		Vec::new ();
+
+	let mut other_chunks_seen: HashSet <ChunkId> =
+		HashSet::new ();
+
+	read_bundles_metadata (
+		output,
+		& repository,
+		& old_bundles,
+		& all_index_entries,
+		& mut bundles_to_compact,
+		& mut bundles_to_delete,
+		& mut other_chunks_seen,
+	) ?;
+
+	// delete bundles
+
+	delete_bundles (
+		output,
+		& repository,
+		& bundles_to_delete,
+	) ?;
+
+	// compact bundles
+
+	compact_bundles (
+		output,
+		& repository,
+		& mut temp_files,
+		& all_index_entries,
+		& bundles_to_compact,
+		& other_chunks_seen,
+	) ?;
+
+	// done, return
+
+	Ok (())
+
+}
+
+fn get_all_index_entries (
+	output: & Output,
+	repository: & Repository,
+	index_ids_and_sizes: & Vec <(IndexId, u64)>,
+	all_index_entries: & mut HashSet <(BundleId, ChunkId)>,
+) -> Result <(), String> {
 
 	output.status (
 		"Reading indexes ...");
 
-	let mut index_entries: HashSet <(BundleId, ChunkId)> =
-		HashSet::new ();
-
 	let total_index_size: u64 =
-		index_files.iter ().map (
+		index_ids_and_sizes.iter ().map (
 			|& (_, index_size)|
 			index_size
 		).sum ();
@@ -101,34 +158,33 @@ pub fn gc_bundles (
 	let mut read_index_size: u64 = 0;
 
 	for & (
-		ref index_file_name,
-		ref index_file_size,
-	) in index_files.iter () {
+		index_id,
+		index_size,
+	) in index_ids_and_sizes.iter () {
 
 		output.status_progress (
 			read_index_size,
 			total_index_size);
 
-		let index_file_path =
-			arguments.repository_path
-				.join ("index")
-				.join (& index_file_name);
+		let index_path =
+			repository.index_path (
+				index_id);
 
-		let index_file_entries = (
+		let index_entries = (
 			read_index (
-				& index_file_path,
+				& index_path,
 				repository.encryption_key ())
 		) ?;
 
 		for & (
 			ref bundle_index_header,
 			ref bundle_info,
-		) in index_file_entries.iter () {
+		) in index_entries.iter () {
 
 			for chunk_record
 			in bundle_info.get_chunk_record ().iter () {
 
-				index_entries.insert (
+				all_index_entries.insert (
 					(
 						to_array_24 (
 							bundle_index_header.get_id ()),
@@ -142,41 +198,44 @@ pub fn gc_bundles (
 		}
 
 		read_index_size +=
-			* index_file_size as u64;
+			index_size as u64;
 
 	}
 
 	output.status_done ();
 
-	// read bundle headers
+	Ok (())
+
+}
+
+fn read_bundles_metadata (
+	output: & Output,
+	repository: & Repository,
+	old_bundles: & Vec <BundleId>,
+	all_index_entries: & HashSet <(BundleId, ChunkId)>,
+	bundles_to_compact: & mut Vec <BundleId>,
+	bundles_to_delete: & mut Vec <BundleId>,
+	other_chunks_seen: & mut HashSet <ChunkId>,
+) -> Result <(), String> {
 
 	output.status (
 		"Reading bundle metadata ...");
 
-	let mut bundles_to_compact: Vec <String> =
-		Vec::new ();
-
-	let mut bundles_to_delete: Vec <String> =
-		Vec::new ();
-
 	let mut old_bundles_count: u64 = 0;
 	let old_bundles_total = old_bundles.len () as u64;
 
-	for old_bundle_name in old_bundles {
+	let mut seen_chunk_ids: HashSet <ChunkId> =
+		HashSet::new ();
+
+	for & old_bundle_id in old_bundles {
 
 		output.status_progress (
 			old_bundles_count,
 			old_bundles_total);
 
-		let old_bundle_id: BundleId =
-			to_array_24 (
-				& old_bundle_name.from_hex ().unwrap ());
-
 		let old_bundle_path =
-			arguments.repository_path
-				.join ("bundles")
-				.join (& old_bundle_name [0 .. 2])
-				.join (& old_bundle_name);
+			repository.bundle_path (
+				old_bundle_id);
 
 		let old_bundle_info =
 			read_bundle_info (
@@ -190,15 +249,26 @@ pub fn gc_bundles (
 		for chunk_record
 		in old_bundle_info.get_chunk_record () {
 
-			if index_entries.contains (
-				& (
-					old_bundle_id,
-					to_array_24 (
-						chunk_record.get_id ()),
+			let chunk_id =
+				to_array_24 (
+					chunk_record.get_id ());
+
+			if (
+				all_index_entries.contains (
+					& (
+						old_bundle_id,
+						chunk_id,
+					)
 				)
+			&&
+				! seen_chunk_ids.contains (
+					& chunk_id)
 			) {
 
 				num_to_keep += 1;
+
+				seen_chunk_ids.insert (
+					chunk_id);
 
 			} else {
 
@@ -211,12 +281,23 @@ pub fn gc_bundles (
 		if num_to_keep == 0 {
 
 			bundles_to_delete.push (
-				old_bundle_name);
+				old_bundle_id);
 
 		} else if num_to_reap > 0 {
 
 			bundles_to_compact.push (
-				old_bundle_name);
+				old_bundle_id);
+
+		} else {
+
+			for chunk_record
+			in old_bundle_info.get_chunk_record () {
+
+				other_chunks_seen.insert (
+					to_array_24 (
+						chunk_record.get_id ()));
+
+			}
 
 		}
 
@@ -232,59 +313,68 @@ pub fn gc_bundles (
 			bundles_to_compact.len (),
 			bundles_to_delete.len ()));
 
-	// delete bundles
+	Ok (())
 
-	if ! bundles_to_delete.is_empty () {
+}
 
-		output.status (
-			"Deleting bundles ...");
+fn delete_bundles (
+	output: & Output,
+	repository: & Repository,
+	bundles_to_delete: & Vec <BundleId>,
+) -> Result <(), String> {
 
-		let bundles_to_delete_total = bundles_to_delete.len () as u64;
-		let mut bundles_to_delete_count: u64 = 0;
+	if bundles_to_delete.is_empty () {
+		return Ok (());
+	}
 
-		for bundle_to_delete in bundles_to_delete {
+	output.status (
+		"Deleting bundles ...");
 
-			output.status_progress (
-				bundles_to_delete_count,
-				bundles_to_delete_total);
+	let bundles_to_delete_total = bundles_to_delete.len () as u64;
+	let mut bundles_to_delete_count: u64 = 0;
 
-			io_result (
-				fs::remove_file (
-					repository.path ()
-						.join ("bundles")
-						.join (& bundle_to_delete [0 .. 2])
-						.join (& bundle_to_delete)),
-			) ?;
+	for & bundle_to_delete in bundles_to_delete {
 
-			bundles_to_delete_count += 1;
+		output.status_progress (
+			bundles_to_delete_count,
+			bundles_to_delete_total);
 
-		}
+		io_result (
+			fs::remove_file (
+				repository.bundle_path (
+					bundle_to_delete)),
+		) ?;
 
-		output.status_done ();
+		bundles_to_delete_count += 1;
 
 	}
 
-	// garbage collect bundles
+	output.status_done ();
 
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
+	Ok (())
+
+}
+
+fn compact_bundles (
+	output: & Output,
+	repository: & Repository,
+	temp_files: & mut TempFileManager,
+	all_index_entries: & HashSet <(BundleId, ChunkId)>,
+	bundles_to_compact: & Vec <BundleId>,
+	other_chunks_seen: & HashSet <ChunkId>,
+) -> Result <(), String> {
 
 	let bundles_to_compact_total = bundles_to_compact.len () as u64;
 	let mut bundles_to_compact_count: u64 = 0;
 
-	for bundle_to_compact in bundles_to_compact {
+	let mut seen_chunk_ids: HashSet <ChunkId> =
+		other_chunks_seen.iter ().map (|&c| c).collect ();
 
-		let bundle_id: BundleId =
-			to_array_24 (
-				& bundle_to_compact.from_hex ().unwrap ());
+	for & bundle_to_compact in bundles_to_compact {
 
 		let bundle_path =
-			repository.path ()
-				.join ("bundles")
-				.join (& bundle_to_compact [0 .. 2])
-				.join (& bundle_to_compact);
+			repository.bundle_path (
+				bundle_to_compact);
 
 		output.status_format (
 			format_args! (
@@ -311,18 +401,33 @@ pub fn gc_bundles (
 				) ?
 			);
 
-		let compacted_bundle: Vec <(ChunkId, Vec <u8>)> =
-			uncompacted_bundle.into_iter ().filter (
-				|& (chunk_id, _)|
+		let mut compacted_bundle: Vec <(ChunkId, Vec <u8>)> =
+			Vec::new ();
 
-				index_entries.contains (
+		for (chunk_id, chunk_data)
+		in uncompacted_bundle.into_iter () {
+
+			if (
+				all_index_entries.contains (
 					& (
-						bundle_id,
+						bundle_to_compact,
 						chunk_id,
 					)
 				)
+			&&
+				! seen_chunk_ids.contains (
+					& chunk_id)
+			) {
 
-			).collect ();
+				compacted_bundle.push (
+					(chunk_id, chunk_data));
+
+				seen_chunk_ids.insert (
+					chunk_id);
+
+			}
+
+		}
 
 		let total_chunks =
 			compacted_bundle.len () as u64;
@@ -347,8 +452,6 @@ pub fn gc_bundles (
 		bundles_to_compact_count += 1;
 
 	}
-
-	// done, return
 
 	Ok (())
 

@@ -22,6 +22,7 @@ extern crate adler32;
 extern crate byteorder;
 extern crate clap;
 extern crate crypto;
+extern crate errno;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate libc;

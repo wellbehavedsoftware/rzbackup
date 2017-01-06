@@ -66,13 +66,13 @@ pub fn balance_indexes (
 
 	// get list of index files
 
-	let old_indexes = (
-		scan_index_files (
+	let old_index_ids_and_sizes = (
+		scan_index_files_with_sizes (
 			& arguments.repository_path)
 	) ?;
 
 	let total_index_size =
-		old_indexes.iter ().map (
+		old_index_ids_and_sizes.iter ().map (
 			|& (_, old_index_size)|
 			old_index_size
 		).sum ();
@@ -80,7 +80,7 @@ pub fn balance_indexes (
 	output.message_format (
 		format_args! (
 			"Found {} index files with total size {}",
-			old_indexes.len (),
+			old_index_ids_and_sizes.len (),
 			total_index_size));
 
 	// balance indexes
@@ -98,12 +98,14 @@ pub fn balance_indexes (
 	output.status (
 		"Balancing indexes ...");
 
-	for (old_index_name, old_index_size) in old_indexes {
+	for (
+		old_index_id,
+		old_index_size,
+	) in old_index_ids_and_sizes {
 
 		let old_index_path =
-			arguments.repository_path
-				.join ("index")
-				.join (old_index_name);
+			repository.index_path (
+				old_index_id);
 
 		for old_index_entry in (
 

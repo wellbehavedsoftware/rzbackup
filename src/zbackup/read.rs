@@ -310,7 +310,8 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 
 			return Err (
 				format! (
-					"Error reading {}: Unsupported bundle file compression method {}",
+					"Error reading {}: Unsupported bundle file compression \
+						method {}",
 					bundle_path.to_string_lossy (),
 					bundle_file_header.get_compression_method ()));
 

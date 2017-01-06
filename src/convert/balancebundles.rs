@@ -74,13 +74,13 @@ pub fn balance_bundles (
 
 	// get list of index files
 
-	let old_indexes = (
-		scan_index_files (
+	let old_index_ids_and_sizes = (
+		scan_index_files_with_sizes (
 			& arguments.repository_path)
 	) ?;
 
 	let total_index_size =
-		old_indexes.iter ().map (
+		old_index_ids_and_sizes.iter ().map (
 			|& (_, old_index_size)|
 			old_index_size
 		).sum ();
@@ -88,7 +88,7 @@ pub fn balance_bundles (
 	output.message_format (
 		format_args! (
 			"Found {} index files with total size {}",
-			old_indexes.len (),
+			old_index_ids_and_sizes.len (),
 			total_index_size));
 
 	// read indexes and discard any which are balanced
@@ -96,7 +96,7 @@ pub fn balance_bundles (
 	output.status (
 		"Reading indexes ...");
 
-	let mut unbalanced_indexes: Vec <(String, Vec <IndexEntry>)> =
+	let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
 		Vec::new ();
 
 	let mut read_index_size: u64 = 0;
@@ -105,12 +105,14 @@ pub fn balance_bundles (
 	let minimum_chunk_count: u64 =
 		arguments.chunks_per_bundle * arguments.fill_factor / 100;
 
-	for (old_index_name, old_index_size) in old_indexes {
+	for (
+		old_index_id,
+		old_index_size,
+	) in old_index_ids_and_sizes {
 
 		let old_index_path =
-			arguments.repository_path
-				.join ("index")
-				.join (& old_index_name);
+			repository.index_path (
+				old_index_id);
 
 		let old_index_entries = (
 			read_index (
@@ -135,7 +137,7 @@ pub fn balance_bundles (
 
 			unbalanced_indexes.push (
 				(
-					old_index_name,
+					old_index_id,
 					old_index_entries,
 				)
 			);
@@ -185,7 +187,7 @@ pub fn balance_bundles (
 			& arguments.repository_path,
 		) ?;
 
-	for (unbalanced_index_name, unbalanced_index_entries)
+	for (unbalanced_index_id, unbalanced_index_entries)
 	in unbalanced_indexes {
 
 		for (unbalanced_index_bundle_header, unbalanced_index_bundle_info)
@@ -267,9 +269,8 @@ pub fn balance_bundles (
 		}
 
 		temp_files.delete (
-			repository.path ()
-				.join ("index")
-				.join (unbalanced_index_name));
+			repository.index_path (
+				unbalanced_index_id));
 
 	}
 

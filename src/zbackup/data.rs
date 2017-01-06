@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+use rand;
+use rand::Rng;
+
+use rustc_serialize::hex::FromHex;
+
+use ::misc::*;
 use zbackup::proto;
 
 /// The size of a ZBackup encryption key, in bytes
@@ -23,11 +29,83 @@ pub const WORK_JOBS_BATCH: usize = 0;
 /// A ZBackup bundle ID
 pub type BundleId = [u8; 24];
 
+pub fn bundle_id_generate () -> BundleId {
+	generic_id_generate ()
+}
+
+pub fn bundle_id_parse (string: & str) -> Result <BundleId, String> {
+	generic_id_parse (string, "bundle id")
+}
+
 /// A ZBackup chunk ID
 pub type ChunkId = [u8; 24];
 
+pub fn chunk_id_generate () -> ChunkId {
+	generic_id_generate ()
+}
+
+pub fn chunk_id_parse (string: & str) -> Result <ChunkId, String> {
+	generic_id_parse (string, "chunk id")
+}
+
 /// A ZBackup index ID
 pub type IndexId = [u8; 24];
+
+pub fn index_id_generate () -> IndexId {
+	generic_id_generate ()
+}
+
+pub fn index_id_parse (string: & str) -> Result <IndexId, String> {
+	generic_id_parse (string, "index id")
+}
+
+fn generic_id_generate (
+) -> [u8; 24] {
+
+	let id_bytes: Vec <u8> =
+		rand::thread_rng ()
+			.gen_iter::<u8> ()
+			.take (24)
+			.collect ();
+
+	to_array_24 (
+		& id_bytes)
+
+}
+
+fn generic_id_parse (
+	string: & str,
+	type_name: & str,
+) -> Result <[u8; 24], String> {
+
+	if string.len () != 48 {
+
+		return Err (
+			format! (
+				"Invalid {}: {}",
+				type_name,
+				string));
+
+	}
+
+	string.from_hex ().map (
+		|hex_vector|
+
+		to_array_24 (
+			& hex_vector)
+
+	).or_else (
+		|_hex_error|
+
+		Err (
+			format! (
+				"Invalid {}: {}",
+				type_name,
+				string))
+
+	)
+
+}
 
 /// A ZBackup chunk's data
 pub type ChunkData = Arc <Vec <u8>>;

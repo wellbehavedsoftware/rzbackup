@@ -1,8 +1,13 @@
 use std::fs;
 use std::fs::File;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
+
+use errno;
+
+use libc;
 
 use rand;
 use rand::Rng;
@@ -10,6 +15,7 @@ use rand::Rng;
 use ::misc::*;
 
 pub struct TempFileManager {
+	lock_fd: libc::c_int,
 	temp_dir_path: PathBuf,
 	temp_files: Vec <(String, PathBuf)>,
 	delete_files: Vec <PathBuf>,
@@ -20,6 +26,57 @@ impl TempFileManager {
 	pub fn new (
 		repository_path: & Path,
 	) -> Result <TempFileManager, String> {
+
+		let lock_path =
+			repository_path.join ("lock");
+
+		let lock_path_c_str: Vec <u8> =
+			lock_path
+				.as_os_str ().as_bytes ()
+				.clone ().into_iter ()
+				.chain (b"\0")
+				.map (|&c| c)
+				.collect ();
+
+		let lock_fd: libc::c_int;
+
+		unsafe {
+
+			lock_fd =
+				libc::open (
+					& lock_path_c_str [0]
+						as * const u8
+						as * const i8,
+					libc::O_CREAT | libc::O_WRONLY | libc::O_TRUNC,
+					0o0600);
+
+			if lock_fd < 0 {
+
+				return Err (
+					format! (
+						"Error creating lock file {}: {}",
+						lock_path.to_string_lossy (),
+						errno::errno ()));
+
+			}
+
+			let flock_result =
+				libc::flock (
+					lock_fd,
+					libc::LOCK_EX);
+
+			if flock_result != 0 {
+
+				libc::close (lock_fd);
+
+				return Err (
+					format! (
+						"Error obtaining lock on file: {}",
+						lock_path.to_string_lossy ()));
+
+			}
+
+		}
 
 		let temp_dir_path =
 			repository_path.join ("tmp");
@@ -33,11 +90,21 @@ impl TempFileManager {
 				fs::create_dir (
 					temp_dir_path.clone (),
 				),
-			) ?;
+			).map_err (
+				|error| {
+
+				unsafe {
+					libc::close (lock_fd);
+				}
+
+				error
+
+			}) ?;
 
 		}
 
 		Ok (TempFileManager {
+			lock_fd: lock_fd,
 			temp_dir_path: temp_dir_path,
 			temp_files: Vec::new (),
 			delete_files: Vec::new (),
@@ -168,6 +235,52 @@ impl TempFileManager {
 		// return
 
 		Ok (())
+
+	}
+
+	pub fn changes (
+		& self,
+	) -> bool {
+
+		! self.delete_files.is_empty ()
+		|| ! self.temp_files.is_empty ()
+
+	}
+
+}
+
+impl Drop for TempFileManager {
+
+	fn drop (
+		& mut self,
+	) {
+
+		// remove temporary files and directory
+
+		for & (ref temp_file_name, _)
+		in self.temp_files.iter () {
+
+			fs::remove_file (
+				temp_file_name,
+			).expect (
+				"Error removing temporary file",
+			);
+
+		}
+
+		fs::remove_dir (
+			& self.temp_dir_path,
+		).expect (
+			"Error removing temporary directory",
+		);
+
+		// release lock
+
+		unsafe {
+
+			libc::close (self.lock_fd);
+
+		}
 
 	}
 

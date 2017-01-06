@@ -1370,10 +1370,8 @@ impl Repository {
 	) -> BoxFuture <ChunkData, String> {
 
 		let bundle_path =
-			self.data.path
-				.join ("bundles")
-				.join (& bundle_id.to_hex () [0 .. 2])
-				.join (bundle_id.to_hex ());
+			self.bundle_path (
+				bundle_id);
 
 		self_state.bundles_loading.insert (
 			bundle_id.clone (),
@@ -1679,6 +1677,33 @@ impl Repository {
 		& self,
 	) -> Option <[u8; KEY_SIZE]> {
 		self.data.encryption_key
+	}
+
+	/// Convenience function to return the filesystem path for an index id.
+
+	pub fn index_path (
+		& self,
+		index_id: IndexId,
+	) -> PathBuf {
+
+		self.data.path
+			.join ("index")
+			.join (index_id.to_hex ())
+
+	}
+
+	/// Convenience function to return the filesystem path for a bundle id.
+
+	pub fn bundle_path (
+		& self,
+		bundle_id: BundleId,
+	) -> PathBuf {
+
+		self.data.path
+			.join ("bundles")
+			.join (bundle_id [0 .. 1].to_hex ())
+			.join (bundle_id.to_hex ())
+
 	}
 
 }

@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use clap;
 
@@ -57,13 +56,13 @@ pub fn check_indexes (
 
 	// get list of index files
 
-	let old_index_names_and_sizes = (
-		scan_index_files (
+	let old_index_ids_and_sizes = (
+		scan_index_files_with_sizes (
 			& arguments.repository_path)
 	) ?;
 
 	let old_index_total_size: u64 =
-		old_index_names_and_sizes.iter ().map (
+		old_index_ids_and_sizes.iter ().map (
 			|& (_, old_index_size)|
 			old_index_size as u64
 		).sum ();
@@ -71,11 +70,11 @@ pub fn check_indexes (
 	output.message_format (
 		format_args! (
 			"Found {} index files",
-			old_index_names_and_sizes.len ()));
+			old_index_ids_and_sizes.len ()));
 
 	// get a list of bundle files
 
-	let bundle_names: HashSet <String> = (
+	let bundle_ids: HashSet <BundleId> = (
 		scan_bundle_files (
 			& arguments.repository_path,
 		) ?
@@ -84,7 +83,7 @@ pub fn check_indexes (
 	output.message_format (
 		format_args! (
 			"Found {} bundle files",
-			bundle_names.len ()));
+			bundle_ids.len ()));
 
 	// check indexes
 
@@ -106,26 +105,22 @@ pub fn check_indexes (
 	let mut missing_chunk_count: u64 = 0;
 	let mut duplicated_chunk_count: u64 = 0;
 
-	for (index_name, old_index_size)
-	in old_index_names_and_sizes {
+	for (
+		old_index_id,
+		old_index_size,
+	) in old_index_ids_and_sizes {
 
 		output.status_progress (
 			checked_index_size,
 			old_index_total_size);
 
-		let index_name =
-			Rc::new (
-				index_name,
-			);
-
-		let index_path =
-			arguments.repository_path
-				.join ("index")
-				.join (index_name.as_ref ());
+		let old_index_path =
+			repository.index_path (
+				old_index_id);
 
 		let old_index_entries =
 			read_index (
-				& index_path,
+				& old_index_path,
 				repository.encryption_key (),
 			) ?;
 
@@ -139,21 +134,21 @@ pub fn check_indexes (
 			ref old_index_bundle_info,
 		) in old_index_entries.iter () {
 
-			let old_index_bundle_name =
+			let old_index_bundle_id =
 				to_array_24 (
 					old_index_bundle_header.get_id (),
-				).to_hex ();
+				);
 
-			if ! bundle_names.contains (
-				& old_index_bundle_name) {
+			if ! bundle_ids.contains (
+				& old_index_bundle_id) {
 
 				if arguments.verbose {
 
 					output.message_format (
 						format_args! (
 							"Index {} refers to nonexistant bundle {}",
-							& index_name,
-							old_index_bundle_name));
+							old_index_id.to_hex (),
+							old_index_bundle_id.to_hex ()));
 
 				}
 
@@ -182,7 +177,7 @@ pub fn check_indexes (
 						output.message_format (
 							format_args! (
 								"Index {} contains duplicated chunk {}",
-								& index_name,
+								old_index_id.to_hex (),
 								chunk_id.to_hex ()));
 
 					}
@@ -223,20 +218,18 @@ pub fn check_indexes (
 
 					output.message_format (
 						format_args! (
-							"Removing index {} (TODO)",
-							index_name));
+							"Removing index {}",
+							old_index_id.to_hex ()));
 
 					temp_files.delete (
-						repository.path ()
-							.join ("index")
-							.join (index_name.as_ref ()));
+						old_index_path);
 
 				} else if ! arguments.verbose {
 
 					output.message_format (
 						format_args! (
 							"Index {} contains no valid entries",
-							index_name));
+							old_index_id.to_hex ()));
 
 				}
 
@@ -247,18 +240,14 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Repairing index {}",
-							index_name));
+							old_index_id.to_hex ()));
 
-					let new_index_file =
-						Box::new (
-							temp_files.create (
-								index_path,
-							) ?
-						);
+					temp_files.delete (
+						old_index_path);
 
-					write_index (
-						new_index_file,
-						repository.encryption_key (),
+					write_index_auto (
+						& repository,
+						& mut temp_files,
 						& new_index_entries,
 					) ?;
 
@@ -267,7 +256,7 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Index {} contains errors",
-							index_name));
+							old_index_id.to_hex ()));
 
 				}
 

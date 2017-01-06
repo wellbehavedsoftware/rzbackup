@@ -2,9 +2,6 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use rand;
-use rand::Rng;
-
 use rustc_serialize::hex::ToHex;
 
 use ::Repository;
@@ -17,12 +14,12 @@ pub fn scan_index_files <
 	RepositoryPath: AsRef <Path>,
 > (
 	repository_path: RepositoryPath,
-) -> Result <Vec <(String, u64)>, String> {
+) -> Result <Vec <IndexId>, String> {
 
 	let repository_path =
 		repository_path.as_ref ();
 
-	let mut indexes_and_sizes: Vec <(String, u64)> =
+	let mut index_ids: Vec <IndexId> =
 		Vec::new ();
 
 	// read directory
@@ -47,19 +44,82 @@ pub fn scan_index_files <
 			dir_entry.file_name ();
 
 		let index_name =
-			file_name.to_str ().unwrap ().to_owned ();
+			file_name.to_string_lossy ();
 
-		let index_metadata = (
+		let index_id =
+			index_id_parse (
+				index_name.as_ref (),
+			) ?;
 
-			io_result (
+		index_ids.push (
+			index_id);
+
+	}
+
+	// return
+
+	Ok (index_ids)
+
+}
+
+pub fn scan_index_files_with_sizes <
+	RepositoryPath: AsRef <Path>,
+> (
+	repository_path: RepositoryPath,
+) -> Result <Vec <(IndexId, u64)>, String> {
+
+	let repository_path =
+		repository_path.as_ref ();
+
+	let mut index_ids_and_sizes: Vec <(IndexId, u64)> =
+		Vec::new ();
+
+	// read directory
+
+	let indexes_path =
+		repository_path.join (
+			"index");
+
+	for dir_entry_result in
+		io_result_with_prefix (
+			|| format! (
+				"Error opening directory {}: ",
+				indexes_path.to_string_lossy ()),
+			fs::read_dir (
+				& indexes_path),
+		) ? {
+
+		let dir_entry =
+			io_result_with_prefix (
+				|| format! (
+					"Error reading directory {}: ",
+					indexes_path.to_string_lossy ()),
+				dir_entry_result,
+			) ?;
+
+		let file_name =
+			dir_entry.file_name ();
+
+		let index_name =
+			file_name.to_string_lossy ();
+
+		let index_id =
+			index_id_parse (
+				index_name.as_ref (),
+			) ?;
+
+		let index_metadata =
+			io_result_with_prefix (
+				|| format! (
+					"Error getting metadata for {}",
+					dir_entry.path ().to_string_lossy ()),
 				fs::metadata (
-					dir_entry.path ()))
+					dir_entry.path ()),
+			) ?;
 
-		) ?;
-
-		indexes_and_sizes.push (
+		index_ids_and_sizes.push (
 			(
-				index_name,
+				index_id,
 				index_metadata.len (),
 			)
 		);
@@ -68,7 +128,7 @@ pub fn scan_index_files <
 
 	// return
 
-	Ok (indexes_and_sizes)
+	Ok (index_ids_and_sizes)
 
 }
 
@@ -158,12 +218,12 @@ pub fn scan_bundle_files <
 	RepositoryPath: AsRef <Path>,
 > (
 	repository_path: RepositoryPath,
-) -> Result <Vec <String>, String> {
+) -> Result <Vec <BundleId>, String> {
 
 	let repository_path =
 		repository_path.as_ref ();
 
-	let mut bundle_files: Vec <String> =
+	let mut bundle_ids: Vec <BundleId> =
 		Vec::new ();
 
 	for prefix in (0 .. 256).map (
@@ -185,58 +245,120 @@ pub fn scan_bundle_files <
 					bundles_directory))
 		) ? {
 
-			let dir_entry = (
+			let dir_entry =
 				io_result (
-					dir_entry_result)
-			) ?;
+					dir_entry_result,
+				) ?;
 
-			bundle_files.push (
-				dir_entry.file_name ().to_str ().unwrap ().to_owned ());
+			let file_name =
+				dir_entry.file_name ();
+
+			let bundle_name =
+				file_name.to_string_lossy ();
+
+			let bundle_id =
+				bundle_id_parse (
+					bundle_name.as_ref (),
+				) ?;
+
+			bundle_ids.push (
+				bundle_id);
 
 		}
 
 	}
 
-	Ok (bundle_files)
+	Ok (bundle_ids)
+
+}
+
+pub fn scan_bundle_files_with_sizes <
+	RepositoryPath: AsRef <Path>,
+> (
+	repository_path: RepositoryPath,
+) -> Result <Vec <(BundleId, u64)>, String> {
+
+	let repository_path =
+		repository_path.as_ref ();
+
+	let mut bundle_ids_and_sizes: Vec <(BundleId, u64)> =
+		Vec::new ();
+
+	for prefix in (0 .. 256).map (
+		|byte| [ byte as u8 ].to_hex ()
+	) {
+
+		let bundles_directory =
+			repository_path
+				.join ("bundles")
+				.join (prefix);
+
+		if ! bundles_directory.exists () {
+			continue;
+		}
+
+		for dir_entry_result in (
+			io_result (
+				fs::read_dir (
+					bundles_directory))
+		) ? {
+
+			let dir_entry =
+				io_result (
+					dir_entry_result,
+				) ?;
+
+			let file_name =
+				dir_entry.file_name ();
+
+			let bundle_name =
+				file_name.to_string_lossy ();
+
+			let bundle_id =
+				bundle_id_parse (
+					bundle_name.as_ref (),
+				) ?;
+
+			let bundle_metadata =
+				io_result_with_prefix (
+					|| format! (
+						"Error getting metadata for {}",
+						dir_entry.path ().to_string_lossy ()),
+					fs::metadata (
+						dir_entry.path ()),
+				) ?;
+
+			bundle_ids_and_sizes.push (
+				(
+					bundle_id,
+					bundle_metadata.len (),
+				)
+			);
+
+		}
+
+	}
+
+	Ok (bundle_ids_and_sizes)
 
 }
 
 pub fn flush_index_entries (
 	repository: & Repository,
 	temp_files: & mut TempFileManager,
-	entries_buffer: & mut Vec <IndexEntry>,
-) -> Result <(), String> {
+	index_entries_buffer: & mut Vec <IndexEntry>,
+) -> Result <IndexId, String> {
 
-	let new_index_bytes: Vec <u8> =
-		rand::thread_rng ()
-			.gen_iter::<u8> ()
-			.take (24)
-			.collect ();
+	let index_id =
+		write_index_auto (
+			repository,
+			temp_files,
+			& index_entries_buffer,
+		) ?;
 
-	let new_index_name: String =
-		new_index_bytes.to_hex ();
+	index_entries_buffer.clear ();
 
-	let new_index_path =
-		repository.path ()
-			.join ("index")
-			.join (new_index_name);
-
-	let new_index_file =
-		Box::new (
-			temp_files.create (
-				new_index_path,
-			) ?
-		);
-
-	write_index (
-		new_index_file,
-		repository.encryption_key (),
-		& entries_buffer,
-	) ?;
-
-	entries_buffer.clear ();
-
-	Ok (())
+	Ok (index_id)
 
 }
 

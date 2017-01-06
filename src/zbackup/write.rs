@@ -13,6 +13,8 @@ use protobuf::stream::CodedOutputStream;
 use rand;
 use rand::Rng;
 
+use ::Repository;
+use ::TempFileManager;
 use ::compress::lzma;
 use ::misc::*;
 use ::zbackup::crypto::CryptoWriter;
@@ -181,6 +183,35 @@ pub fn write_bundle <
 
 	Ok (bundle_info)
 
+}
+
+pub fn write_index_auto (
+	repository: & Repository,
+	temp_files: & mut TempFileManager,
+	index_entries: & [IndexEntry],
+) -> Result <IndexId, String> {
+
+	let index_id =
+		index_id_generate ();
+
+	let index_path =
+		repository.index_path (
+			index_id);
+
+	let index_file =
+		Box::new (
+			temp_files.create (
+				index_path,
+			) ?
+		);
+
+	write_index (
+		index_file,
+		repository.encryption_key (),
+		& index_entries,
+	) ?;
+
+	Ok (index_id)
 
 }
 

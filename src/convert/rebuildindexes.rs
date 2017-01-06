@@ -5,8 +5,6 @@ use clap;
 
 use output::Output;
 
-use rustc_serialize::hex::FromHex;
-
 use ::Repository;
 use ::TempFileManager;
 use ::convert::utils::*;
@@ -61,15 +59,15 @@ pub fn rebuild_indexes (
 
 	// get list of bundle files
 
-	let bundle_names = (
+	let bundle_ids =
 		scan_bundle_files (
-			& arguments.repository_path)
-	) ?;
+			& arguments.repository_path,
+		) ?;
 
 	output.message_format (
 		format_args! (
 			"Found {} bundle files",
-			bundle_names.len ()));
+			bundle_ids.len ()));
 
 	// rebuild indexes
 
@@ -86,28 +84,15 @@ pub fn rebuild_indexes (
 	output.status (
 		"Rebuilding indexes");
 
-	for bundle_name in bundle_names.iter () {
+	for & bundle_id in bundle_ids.iter () {
 
 		output.status_progress (
 			bundle_count,
-			bundle_names.len () as u64);
-
-		let bundle_id =
-			bundle_name.from_hex (
-			).map_err (
-				|_|
-
-				format! (
-					"Invalid bundle name: {}",
-					bundle_name)
-
-			) ?;
+			bundle_ids.len () as u64);
 
 		let bundle_path =
-			repository.path ()
-				.join ("bundles")
-				.join (& bundle_name [0 .. 2])
-				.join (& bundle_name);
+			repository.bundle_path (
+				bundle_id);
 
 		let bundle_info =
 			read_bundle_info (
@@ -119,7 +104,7 @@ pub fn rebuild_indexes (
 			proto::IndexBundleHeader::new ();
 
 		index_bundle_header.set_id (
-			bundle_id);
+			bundle_id.to_vec ());
 
 		entries_buffer.push (
 			(
@@ -158,23 +143,21 @@ pub fn rebuild_indexes (
 
 	// remove old indexes
 
-	let old_index_names = (
+	let old_index_ids =
 		scan_index_files (
-			& arguments.repository_path)
-	) ?;
+			& arguments.repository_path,
+		) ?;
 
 	output.message_format (
 		format_args! (
 			"Removing {} old index files",
-			old_index_names.len ()));
+			old_index_ids.len ()));
 
-	for & (ref old_index_name, ref _old_index_size)
-	in old_index_names.iter () {
+	for old_index_id in old_index_ids {
 
 		temp_files.delete (
-			repository.path ()
-				.join ("index")
-				.join (old_index_name));
+			repository.index_path (
+				old_index_id));
 
 	}
 

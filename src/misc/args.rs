@@ -45,6 +45,19 @@ pub fn string_required (
 
 }
 
+pub fn string_optional (
+	matches: & clap::ArgMatches,
+	name: & str,
+) -> Option <String> {
+
+	matches.value_of (
+		name,
+	).map (
+		String::from,
+	)
+
+}
+
 pub fn path_required (
 	matches: & clap::ArgMatches,
 	name: & str,

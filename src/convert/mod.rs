@@ -4,6 +4,7 @@ pub mod utils;
 
 mod balancebundles;
 mod balanceindexes;
+mod checkbundles;
 mod checkindexes;
 mod gcbundles;
 mod gcindexes;
@@ -17,6 +18,7 @@ use ::misc::*;
 
 pub use self::balancebundles::*;
 pub use self::balanceindexes::*;
+pub use self::checkbundles::*;
 pub use self::checkindexes::*;
 pub use self::gcbundles::*;
 pub use self::gcindexes::*;
@@ -34,6 +36,7 @@ pub fn convert_command (
 			vec! [
 				balance_bundles_command (),
 				balance_indexes_command (),
+				check_bundles_command (),
 				check_indexes_command (),
 				gc_bundles_command (),
 				gc_indexes_command (),
