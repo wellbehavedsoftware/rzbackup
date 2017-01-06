@@ -1,15 +1,9 @@
 use std::collections::HashSet;
-use std::io::Cursor;
-use std::path::Path;
 use std::path::PathBuf;
 
 use clap;
 
-use crypto::sha1::Sha1;
-
 use output::Output;
-
-use protobuf::stream::CodedInputStream;
 
 use rand;
 use rand::Rng;
@@ -316,111 +310,6 @@ pub fn gc_indexes (
 	temp_files.commit () ?;
 
 	output.status_done ();
-
-	Ok (())
-
-}
-
-fn collect_chunks_from_backup (
-	repository: & Repository,
-	chunk_ids: & mut HashSet <ChunkId>,
-	backup_file: & Path,
-) -> Result <(), String> {
-
-	// load backup
-
-	let backup_info =
-		read_backup_file (
-			repository.path ()
-				.join ("backups")
-				.join (backup_file),
-			repository.encryption_key (),
-		) ?;
-
-	// collect chunk ids
-
-	collect_chunks_from_instructions (
-		chunk_ids,
-		& backup_info.get_backup_data (),
-	) ?;
-
-	// expand backup data
-
-	let mut input =
-		Cursor::new (
-			backup_info.get_backup_data ().to_owned ());
-
-	for _iteration in 0 .. backup_info.get_iterations () {
-
-		let mut temp_output: Cursor <Vec <u8>> =
-			Cursor::new (
-				Vec::new ());
-
-		let mut sha1_digest =
-			Sha1::new ();
-
-		repository.follow_instructions (
-			& mut input,
-			& mut temp_output,
-			& mut sha1_digest,
-			& |_count| (),
-		) ?;
-
-		let result =
-			temp_output.into_inner ();
-
-		// collect chunk ids
-
-		collect_chunks_from_instructions (
-			chunk_ids,
-			& result,
-		) ?;
-
-		// prepare for next iteration
-
-		input =
-			Cursor::new (
-				result);
-
-	}
-
-	Ok (())
-
-}
-
-fn collect_chunks_from_instructions (
-	chunk_ids: & mut HashSet <ChunkId>,
-	instructions: & [u8],
-) -> Result <(), String> {
-
-	let mut instructions_cursor =
-		Cursor::new (
-			& instructions);
-
-	let mut coded_input_stream =
-		CodedInputStream::new (
-			& mut instructions_cursor);
-
-	while ! protobuf_result (
-		coded_input_stream.eof (),
-	) ? {
-
-		let backup_instruction: proto::BackupInstruction =
-			read_message (
-				& mut coded_input_stream,
-				|| format! (
-					"backup instruction"),
-			) ?;
-
-		if backup_instruction.has_chunk_to_emit () {
-
-			chunk_ids.insert (
-				to_array_24 (
-					backup_instruction.get_chunk_to_emit ()));
-
-		}
-
-	}
 
 	Ok (())
 

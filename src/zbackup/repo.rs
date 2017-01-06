@@ -943,92 +943,77 @@ impl Repository {
 
 			}
 
-			let completed_job_target;
+			let have_current_chunk_job =
+				current_chunk_job.is_some ();
+
+			let have_future_chunk_job =
+				future_chunk_job.is_some ();
 
 			if (
-				current_chunk_job.is_some ()
-				&& future_chunk_job.is_some ()
+				! have_current_chunk_job
+				&& ! have_future_chunk_job
 			) {
-
-				let value = match
-					futures::select_all (
-
-					vec! [
-						current_chunk_job.unwrap (),
-						future_chunk_job.unwrap (),
-					]
-
-				).wait () {
-
-					Ok ((value, index, remaining_future)) => {
-
-						if index == 0 {
-
-							future_chunk_job = Some (
-
-								remaining_future.into_iter ()
-									.next ()
-									.unwrap ()
-									.boxed ()
-
-							);
-
-							current_chunk_job = None;
-
-							value
-
-						} else {
-
-							current_chunk_job = Some (
-
-								remaining_future.into_iter ()
-									.next ()
-									.unwrap ()
-									.boxed ()
-
-							);
-
-							future_chunk_job = None;
-
-							value
-
-						}
-
-					},
-
-					Err ((error, index, _)) => {
-
-						panic! (
-							"Future error index {}: {}",
-							index,
-							error);
-
-					},
-
-				};
-
-				completed_job_target =
-					value;
-
-			} else if current_chunk_job.is_some () {
-
-				completed_job_target =
-					current_chunk_job.unwrap ().wait ().unwrap ();
-
-				current_chunk_job = None;
-
-			} else if future_chunk_job.is_some () {
-
-				completed_job_target =
-					future_chunk_job.unwrap ().wait ().unwrap ();
-
-				future_chunk_job = None;
-
-			} else {
-
 				break;
-
 			}
+
+			let completed_job_target =
+				match futures::select_all (vec! [
+
+				current_chunk_job.unwrap_or_else (
+					|| futures::empty ().boxed ()),
+
+				future_chunk_job.unwrap_or_else (
+					|| futures::empty ().boxed ()),
+
+			]).wait () {
+
+				Ok ((value, 0, remaining_future)) => {
+
+					future_chunk_job =
+						if have_future_chunk_job {
+
+							Some (
+								remaining_future.into_iter ()
+									.next ()
+									.unwrap ()
+									.boxed ()
+							)
+
+						} else { None };
+
+					current_chunk_job = None;
+
+					value
+
+				},
+
+				Ok ((value, 1, remaining_future)) => {
+
+					current_chunk_job =
+						if have_current_chunk_job {
+
+							Some (
+								remaining_future.into_iter ()
+									.next ()
+									.unwrap ()
+									.boxed ()
+							)
+
+						} else { None };
+
+					future_chunk_job = None;
+
+					value
+
+				},
+
+				Ok ((_, _, _)) =>
+					panic! ("Not possible"),
+
+				Err ((error, _, _)) =>
+					return Err (error),
+
+			};
 
 			// handle the something that happened
 
@@ -1626,6 +1611,29 @@ impl Repository {
 				),
 
 		}
+
+	}
+
+	/// Returns true if a chunk is present in the loaded indexes
+
+	pub fn has_chunk (
+		& self,
+		chunk_id: ChunkId,
+	) -> bool {
+
+		let self_state =
+			self.state.lock ().unwrap ();
+
+		if self_state.master_index.is_none () {
+
+			panic! (
+				"Must load indexes before getting index entries");
+
+		}
+
+		self_state.master_index.as_ref ().unwrap ().get (
+			& chunk_id,
+		).is_some ()
 
 	}
 
