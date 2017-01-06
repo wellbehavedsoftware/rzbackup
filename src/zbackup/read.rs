@@ -178,14 +178,14 @@ pub fn read_index <PathRef: AsRef <Path>> (
 	// open file
 
 	let mut source =
-		try! (
-			io_result_with_prefix (
-				|| format! (
-					"Error opening {}: ",
-					index_path.to_string_lossy ()),
-				open_file_with_crypto_and_adler (
-					index_path,
-					key)));
+		io_result_with_prefix (
+			|| format! (
+				"Error opening {}: ",
+				index_path.to_string_lossy ()),
+			open_file_with_crypto_and_adler (
+				index_path,
+				key),
+		) ?;
 
 	{
 
@@ -196,16 +196,22 @@ pub fn read_index <PathRef: AsRef <Path>> (
 		// read header
 
 		let file_header: proto::FileHeader =
-			try! (
+			string_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					index_path.to_string_lossy ()),
 				read_message (
 					& mut coded_input_stream,
-					|| "file header".to_string ()));
+					|| "file header".to_string ()),
+			) ?;
 
 		if file_header.get_version () != 1 {
 
-			panic! (
-				"Unsupported backup version {}",
-				file_header.get_version ());
+			return Err (
+				format! (
+					"Error reading {}: Unsupported backup version {}",
+					index_path.to_string_lossy (),
+					file_header.get_version ()));
 
 		}
 
@@ -214,24 +220,32 @@ pub fn read_index <PathRef: AsRef <Path>> (
 		loop {
 
 			let index_bundle_header: proto::IndexBundleHeader =
-				try! (
+				string_result_with_prefix (
+					|| format! (
+						"Error reading {}: ",
+						index_path.to_string_lossy ()),
 					read_message (
 						& mut coded_input_stream,
 						|| format! (
 							"index bundle header {}",
-							bundle_info_index)));
+							bundle_info_index)),
+				) ?;
 
 			if ! index_bundle_header.has_id () {
 				break;
 			}
 
 			let bundle_info: proto::BundleInfo =
-				try! (
+				string_result_with_prefix (
+					|| format! (
+						"Error reading {}: ",
+						index_path.to_string_lossy ()),
 					read_message (
 						& mut coded_input_stream,
 						|| format! (
 							"bundle info {}",
-							bundle_info_index)));
+							bundle_info_index)),
+				) ?;
 
 			index_entries.push ( (
 				index_bundle_header,
@@ -376,16 +390,22 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 		// read bundle file header
 
 		let bundle_file_header: proto::BundleFileHeader =
-			read_message (
-				& mut coded_input_stream,
-				|| "bundle file header".to_string (),
+			string_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
+				read_message (
+					& mut coded_input_stream,
+					|| "bundle file header".to_string (),
+				),
 			) ?;
 
 		if bundle_file_header.get_version () != 1 {
 
 			return Err (
 				format! (
-					"Unsupported bundle file version {}",
+					"Error reading {}: Unsupported bundle file version {}",
+					bundle_path.to_string_lossy (),
 					bundle_file_header.get_version ()));
 
 		}
@@ -394,7 +414,9 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 			return Err (
 				format! (
-					"Unsupported bundle file compression method {}",
+					"Error reading {}: Unsupported bundle file compression \
+					method {}",
+					bundle_path.to_string_lossy (),
 					bundle_file_header.get_compression_method ()));
 
 		}
@@ -402,9 +424,13 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 		// read bundle info
 
 		bundle_info =
-			read_message (
-				& mut coded_input_stream,
-				|| "bundle info".to_owned (),
+			string_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
+				read_message (
+					& mut coded_input_stream,
+					|| "bundle info".to_owned ()),
 			) ?;
 
 	}
@@ -442,7 +468,10 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 			let mut chunk_bytes: Vec <u8> =
 				vec! [0u8; chunk_record.get_size () as usize];
 
-			io_result (
+			io_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
 				lzma_reader.read_exact (
 					& mut chunk_bytes),
 			) ?;
@@ -463,7 +492,8 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 
 				return Err (
 					format! (
-						"Got invalid sha1 sum for chunk {}: {}",
+						"Error reading {}: Invalid sha1 sum for chunk {}: {}",
+						bundle_path.to_string_lossy (),
 						chunk_id.to_hex (),
 						sha1_sum.to_hex ()));
 
@@ -487,17 +517,22 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 			let mut extra_data: Vec <u8> =
 				Vec::new ();
 
-			io_result (
+			io_result_with_prefix (
+				|| format! (
+					"Error reading {}: ",
+					bundle_path.to_string_lossy ()),
 				lzma_reader.read_to_end (
 					& mut extra_data,
-				)
+				),
 			) ?;
 
 			if ! extra_data.is_empty () {
 
-				panic! (
-					"Got {} extra bytes",
-					extra_data.len ());
+				return Err (
+					format! (
+						"Error reading {}: Got {} extra bytes",
+						bundle_path.to_string_lossy (),
+						extra_data.len ()));
 
 			}
 
