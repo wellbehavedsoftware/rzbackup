@@ -45,32 +45,24 @@ pub fn balance_bundles (
 
 	// open repository
 
-	let repository = match (
+	let repository =
+		io_result_with_prefix (
+			|| format! (
+				"Error opening repository {}: ",
+				arguments.repository_path.to_string_lossy ()),
+			Repository::open (
+				& output,
+				Repository::default_config (),
+				& arguments.repository_path,
+				arguments.password_file_path.clone ()),
+		) ?;
 
-		Repository::open (
-			& output,
-			Repository::default_config (),
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
 			& arguments.repository_path,
-			arguments.password_file_path.clone ())
-
-	) {
-
-		Ok (repository) =>
-			repository,
-
-		Err (error) => {
-
-			output.message_format (
-				format_args! (
-					"Error opening repository {}: {}",
-					arguments.repository_path.to_string_lossy (),
-					error));
-
-			process::exit (1);
-
-		},
-
-	};
+		) ?;
 
 	// get list of index files
 
@@ -181,11 +173,6 @@ pub fn balance_bundles (
 
 	let mut new_index_entries: Vec <IndexEntry> =
 		Vec::new ();
-
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
 
 	for (unbalanced_index_id, unbalanced_index_entries)
 	in unbalanced_indexes {

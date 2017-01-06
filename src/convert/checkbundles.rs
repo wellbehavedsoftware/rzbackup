@@ -51,6 +51,13 @@ pub fn check_bundles (
 				arguments.password_file_path.clone ()),
 		) ?;
 
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
+			& arguments.repository_path,
+		) ?;
+
 	// get a list of index files
 
 	let bundle_ids_and_sizes: Vec <(BundleId, u64)> =
@@ -78,11 +85,6 @@ pub fn check_bundles (
 			bundle_ids_and_sizes.len ()));
 
 	// check bundles
-
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
 
 	let mut checked_bundle_size: u64 = 0;
 

@@ -37,32 +37,24 @@ pub fn balance_indexes (
 
 	// open repository
 
-	let repository = match (
+	let repository =
+		io_result_with_prefix (
+			|| format! (
+				"Error opening repository {}: ",
+				arguments.repository_path.to_string_lossy ()),
+			Repository::open (
+				& output,
+				Repository::default_config (),
+				& arguments.repository_path,
+				arguments.password_file_path.clone ()),
+		) ?;
 
-		Repository::open (
-			& output,
-			Repository::default_config (),
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
 			& arguments.repository_path,
-			arguments.password_file_path.clone ())
-
-	) {
-
-		Ok (repository) =>
-			repository,
-
-		Err (error) => {
-
-			output.message_format (
-				format_args! (
-					"Error opening repository {}: {}",
-					arguments.repository_path.to_string_lossy (),
-					error));
-
-			process::exit (1);
-
-		},
-
-	};
+		) ?;
 
 	// get list of index files
 
@@ -84,11 +76,6 @@ pub fn balance_indexes (
 			total_index_size));
 
 	// balance indexes
-
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
 
 	let mut entries_buffer: Vec <IndexEntry> =
 		Vec::new ();

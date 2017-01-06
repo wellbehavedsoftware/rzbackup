@@ -43,7 +43,7 @@ pub fn check_indexes (
 	// open repository
 
 	let repository =
-		string_result_with_prefix (
+		io_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
@@ -52,6 +52,13 @@ pub fn check_indexes (
 				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
+		) ?;
+
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
+			& arguments.repository_path,
 		) ?;
 
 	// get list of index files
@@ -86,11 +93,6 @@ pub fn check_indexes (
 			bundle_ids.len ()));
 
 	// check indexes
-
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
 
 	let mut checked_index_size: u64 = 0;
 

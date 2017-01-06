@@ -38,24 +38,24 @@ pub fn rebuild_indexes (
 
 	// open repository
 
-	let repository = (
-		Repository::open (
-			& output,
-			Repository::default_config (),
+	let repository =
+		io_result_with_prefix (
+			|| format! (
+				"Error opening repository {}: ",
+				arguments.repository_path.to_string_lossy ()),
+			Repository::open (
+				& output,
+				Repository::default_config (),
+				& arguments.repository_path,
+				arguments.password_file_path.clone ()),
+		) ?;
+
+	// begin transaction
+
+	let mut temp_files =
+		TempFileManager::new (
 			& arguments.repository_path,
-			arguments.password_file_path.clone ())
-	).unwrap_or_else (
-		|error| {
-
-		output.message_format (
-			format_args! (
-				"Error opening repository {}: {}",
-				arguments.repository_path.to_string_lossy (),
-				error));
-
-		process::exit (1);
-
-	});
+		) ?;
 
 	// get list of bundle files
 
@@ -70,11 +70,6 @@ pub fn rebuild_indexes (
 			bundle_ids.len ()));
 
 	// rebuild indexes
-
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
-		) ?;
 
 	let mut entries_buffer: Vec <IndexEntry> =
 		Vec::new ();
