@@ -262,16 +262,16 @@ impl Drop for TempFileManager {
 
 			fs::remove_file (
 				temp_file_name,
-			).expect (
-				"Error removing temporary file",
+			).unwrap_or (
+				() // do nothing
 			);
 
 		}
 
 		fs::remove_dir (
 			& self.temp_dir_path,
-		).expect (
-			"Error removing temporary directory",
+		).unwrap_or (
+			() // do nothing
 		);
 
 		// release lock
