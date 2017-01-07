@@ -165,6 +165,7 @@ impl Command for ServerCommand {
 				clap::Arg::with_name ("password-file")
 
 				.long ("password-file")
+				.alias ("password-file-path")
 				.value_name ("PASSWORD-FILE")
 				.required (false)
 				.help ("Path to the password file")
@@ -283,7 +284,7 @@ impl Command for ServerCommand {
 			password_file_path:
 				args::path_optional (
 					clap_matches,
-					"password-file-path"),
+					"password-file"),
 
 			repository_config:
 				repository_config_parse (
