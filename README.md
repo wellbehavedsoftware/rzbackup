@@ -45,35 +45,51 @@ In cargo.toml:
 
 ```toml
 [dependencies]
-rzbackup = '3.1'
+output = "0.4"
+rzbackup = "3.1"
 ```
 
-Example code, for demonstration (won't compile):
+A basic example (from `examples/restore.rs`):
 
 ```rust
+extern crate output;
 extern crate rzbackup;
 
+use std::env;
+use std::ffi::OsString;
+use std::io;
+
 use rzbackup::Repository;
-use rzbackup::RandomAccess;
 
 fn main () {
 
-	let mut repository =
+	let output =
+		output::open ();
+
+	let arguments: Vec <OsString> =
+		env::args_os ().collect ();
+
+	let repository =
 		Repository::open (
-			"/path/to/repository",
-			Some ("/path/to/password/file"));
+			& output,
+			Repository::default_config (),
+			& arguments [1],
+			if arguments [2] != "" {
+				Some (& arguments [2])
+			} else { None },
+		).unwrap ();
+
+	let stdout =
+		io::stdout ();
+
+	let mut stdout_lock =
+		stdout.lock ();
 
 	repository.restore (
-		"/backup-name",
-		output_stream ());
-
-	let mut random_access =
-		RandomAccess::new (
-			repository,
-			"/backup-name");
-
-	do_something_with_random_access (
-		random_access);
+		& output,
+		arguments [3],
+		& mut stdout_lock,
+	).unwrap ();
 
 }
 ```
