@@ -37,7 +37,6 @@ Notable missing features
 
 * No facility to create backups, these must be performed with the original
   ZBackup tool
-* Verification of backup checksums is not performed
 
 ## Library usage
 
