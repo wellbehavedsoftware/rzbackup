@@ -154,6 +154,7 @@ impl Command for ServerCommand {
 				clap::Arg::with_name ("repository")
 
 				.long ("repository")
+				.alias ("repository-path")
 				.value_name ("REPOSITORY")
 				.required (true)
 				.help ("Path to the repository, used to obtain encryption key")
@@ -277,7 +278,7 @@ impl Command for ServerCommand {
 			repository_path:
 				args::path_required (
 					clap_matches,
-					"repository-path"),
+					"repository"),
 
 			password_file_path:
 				args::path_optional (
