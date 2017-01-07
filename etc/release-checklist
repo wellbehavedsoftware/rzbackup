@@ -1,0 +1,25 @@
+Check everything works:
+
+- Run cargo update; cargo clean; cargo build
+- Check in any changes
+
+Bump version number:
+
+- Update version number in README and Cargo.toml
+- Run cargo update
+- Commit changes with message 'bump version to xxx'
+
+Build package locally:
+
+- Run etc/build-package xxx
+- Push changes
+
+Build package for trusty:
+
+- SSH to trusty build container
+- Run git pull
+- Run etc/build-package xxx
+
+Publish to cargo:
+
+- Run cargo publish
