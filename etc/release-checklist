@@ -8,11 +8,12 @@ Bump version number:
 - Update version number in README and Cargo.toml
 - Run cargo update
 - Commit changes with message 'bump version to xxx'
+- Tag version-xxx
 
 Build package locally:
 
 - Run etc/build-package xxx
-- Push changes
+- Push master and version-xxx
 
 Build package for trusty:
 
