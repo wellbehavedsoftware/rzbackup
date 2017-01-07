@@ -4,14 +4,16 @@ set -euf -o pipefail
 
 contents=(
 
-	"target/release/librzbackup.rlib"
-	"target/release/rzbackup"
+	"README.md"
 
 	"etc/legacy-wrappers/rzbackup-client"
 	"etc/legacy-wrappers/rzbackup-convert"
 	"etc/legacy-wrappers/rzbackup-decrypt"
 	"etc/legacy-wrappers/rzbackup-restore"
 	"etc/legacy-wrappers/rzbackup-server"
+
+	"target/release/librzbackup.rlib"
+	"target/release/rzbackup"
 
 )
 
