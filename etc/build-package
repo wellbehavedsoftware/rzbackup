@@ -4,13 +4,14 @@ set -euf -o pipefail
 
 contents=(
 
-	"librzbackup.rlib"
+	"target/release/librzbackup.rlib"
+	"target/release/rzbackup"
 
-	"rzbackup-client"
-	"rzbackup-convert"
-	"rzbackup-decrypt"
-	"rzbackup-restore"
-	"rzbackup-server"
+	"etc/legacy-wrappers/rzbackup-client"
+	"etc/legacy-wrappers/rzbackup-convert"
+	"etc/legacy-wrappers/rzbackup-decrypt"
+	"etc/legacy-wrappers/rzbackup-restore"
+	"etc/legacy-wrappers/rzbackup-server"
 
 )
 
@@ -25,7 +26,7 @@ rm -rf "work/$package"
 mkdir -p "work/$package"
 
 for content in "${contents[@]}"; do
-	cp "target/release/$content" "work/$package/$content"
+	cp "$content" "work/$package/$(basename $content)"
 done
 
 tar \
