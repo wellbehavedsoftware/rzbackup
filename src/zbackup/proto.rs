@@ -20,7 +20,7 @@
 use protobuf::Message as Message_imported_for_functions;
 use protobuf::ProtobufEnum as ProtobufEnum_imported_for_functions;
 
-#[derive(Clone,Default)]
+#[derive(PartialEq,Clone,Default)]
 pub struct EncryptionKeyInfo {
     // message fields
     salt: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -30,7 +30,7 @@ pub struct EncryptionKeyInfo {
     key_check_hmac: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -47,17 +47,7 @@ impl EncryptionKeyInfo {
             ptr: 0 as *const EncryptionKeyInfo,
         };
         unsafe {
-            instance.get(|| {
-                EncryptionKeyInfo {
-                    salt: ::protobuf::SingularField::none(),
-                    rounds: ::std::option::Option::None,
-                    encrypted_key: ::protobuf::SingularField::none(),
-                    key_check_input: ::protobuf::SingularField::none(),
-                    key_check_hmac: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(EncryptionKeyInfo::new)
         }
     }
 
@@ -97,6 +87,14 @@ impl EncryptionKeyInfo {
         }
     }
 
+    fn get_salt_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.salt
+    }
+
+    fn mut_salt_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.salt
+    }
+
     // required uint32 rounds = 2;
 
     pub fn clear_rounds(&mut self) {
@@ -114,6 +112,14 @@ impl EncryptionKeyInfo {
 
     pub fn get_rounds(&self) -> u32 {
         self.rounds.unwrap_or(0)
+    }
+
+    fn get_rounds_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.rounds
+    }
+
+    fn mut_rounds_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.rounds
     }
 
     // required bytes encrypted_key = 3;
@@ -152,6 +158,14 @@ impl EncryptionKeyInfo {
         }
     }
 
+    fn get_encrypted_key_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.encrypted_key
+    }
+
+    fn mut_encrypted_key_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.encrypted_key
+    }
+
     // required bytes key_check_input = 4;
 
     pub fn clear_key_check_input(&mut self) {
@@ -186,6 +200,14 @@ impl EncryptionKeyInfo {
             Some(v) => &v,
             None => &[],
         }
+    }
+
+    fn get_key_check_input_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.key_check_input
+    }
+
+    fn mut_key_check_input_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.key_check_input
     }
 
     // required bytes key_check_hmac = 5;
@@ -223,6 +245,14 @@ impl EncryptionKeyInfo {
             None => &[],
         }
     }
+
+    fn get_key_check_hmac_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.key_check_hmac
+    }
+
+    fn mut_key_check_hmac_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.key_check_hmac
+    }
 }
 
 impl ::protobuf::Message for EncryptionKeyInfo {
@@ -246,30 +276,30 @@ impl ::protobuf::Message for EncryptionKeyInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.salt));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.salt)?;
                 },
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.rounds = ::std::option::Option::Some(tmp);
                 },
                 3 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.encrypted_key));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.encrypted_key)?;
                 },
                 4 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key_check_input));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key_check_input)?;
                 },
                 5 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key_check_hmac));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key_check_hmac)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -280,20 +310,20 @@ impl ::protobuf::Message for EncryptionKeyInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.salt {
-            my_size += ::protobuf::rt::bytes_size(1, &value);
+        if let Some(v) = self.salt.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         };
-        for value in &self.rounds {
-            my_size += ::protobuf::rt::value_size(2, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.rounds {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.encrypted_key {
-            my_size += ::protobuf::rt::bytes_size(3, &value);
+        if let Some(v) = self.encrypted_key.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(3, &v);
         };
-        for value in &self.key_check_input {
-            my_size += ::protobuf::rt::bytes_size(4, &value);
+        if let Some(v) = self.key_check_input.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(4, &v);
         };
-        for value in &self.key_check_hmac {
-            my_size += ::protobuf::rt::bytes_size(5, &value);
+        if let Some(v) = self.key_check_hmac.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(5, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -302,21 +332,21 @@ impl ::protobuf::Message for EncryptionKeyInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.salt.as_ref() {
-            try!(os.write_bytes(1, &v));
+            os.write_bytes(1, &v)?;
         };
         if let Some(v) = self.rounds {
-            try!(os.write_uint32(2, v));
+            os.write_uint32(2, v)?;
         };
         if let Some(v) = self.encrypted_key.as_ref() {
-            try!(os.write_bytes(3, &v));
+            os.write_bytes(3, &v)?;
         };
         if let Some(v) = self.key_check_input.as_ref() {
-            try!(os.write_bytes(4, &v));
+            os.write_bytes(4, &v)?;
         };
         if let Some(v) = self.key_check_hmac.as_ref() {
-            try!(os.write_bytes(5, &v));
+            os.write_bytes(5, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -330,10 +360,6 @@ impl ::protobuf::Message for EncryptionKeyInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<EncryptionKeyInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -358,30 +384,30 @@ impl ::protobuf::MessageStatic for EncryptionKeyInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "salt",
-                    EncryptionKeyInfo::has_salt,
-                    EncryptionKeyInfo::get_salt,
+                    EncryptionKeyInfo::get_salt_for_reflect,
+                    EncryptionKeyInfo::mut_salt_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "rounds",
-                    EncryptionKeyInfo::has_rounds,
-                    EncryptionKeyInfo::get_rounds,
+                    EncryptionKeyInfo::get_rounds_for_reflect,
+                    EncryptionKeyInfo::mut_rounds_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "encrypted_key",
-                    EncryptionKeyInfo::has_encrypted_key,
-                    EncryptionKeyInfo::get_encrypted_key,
+                    EncryptionKeyInfo::get_encrypted_key_for_reflect,
+                    EncryptionKeyInfo::mut_encrypted_key_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "key_check_input",
-                    EncryptionKeyInfo::has_key_check_input,
-                    EncryptionKeyInfo::get_key_check_input,
+                    EncryptionKeyInfo::get_key_check_input_for_reflect,
+                    EncryptionKeyInfo::mut_key_check_input_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "key_check_hmac",
-                    EncryptionKeyInfo::has_key_check_hmac,
-                    EncryptionKeyInfo::get_key_check_hmac,
+                    EncryptionKeyInfo::get_key_check_hmac_for_reflect,
+                    EncryptionKeyInfo::mut_key_check_hmac_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<EncryptionKeyInfo>(
                     "EncryptionKeyInfo",
@@ -404,24 +430,19 @@ impl ::protobuf::Clear for EncryptionKeyInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for EncryptionKeyInfo {
-    fn eq(&self, other: &EncryptionKeyInfo) -> bool {
-        self.salt == other.salt &&
-        self.rounds == other.rounds &&
-        self.encrypted_key == other.encrypted_key &&
-        self.key_check_input == other.key_check_input &&
-        self.key_check_hmac == other.key_check_hmac &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for EncryptionKeyInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for EncryptionKeyInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct StorageInfo {
     // message fields
     chunk_max_size: ::std::option::Option<u32>,
@@ -430,7 +451,7 @@ pub struct StorageInfo {
     default_compression_method: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -447,16 +468,7 @@ impl StorageInfo {
             ptr: 0 as *const StorageInfo,
         };
         unsafe {
-            instance.get(|| {
-                StorageInfo {
-                    chunk_max_size: ::std::option::Option::None,
-                    bundle_max_payload_size: ::std::option::Option::None,
-                    encryption_key: ::protobuf::SingularPtrField::none(),
-                    default_compression_method: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(StorageInfo::new)
         }
     }
 
@@ -479,6 +491,14 @@ impl StorageInfo {
         self.chunk_max_size.unwrap_or(0)
     }
 
+    fn get_chunk_max_size_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.chunk_max_size
+    }
+
+    fn mut_chunk_max_size_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.chunk_max_size
+    }
+
     // optional uint32 bundle_max_payload_size = 2;
 
     pub fn clear_bundle_max_payload_size(&mut self) {
@@ -496,6 +516,14 @@ impl StorageInfo {
 
     pub fn get_bundle_max_payload_size(&self) -> u32 {
         self.bundle_max_payload_size.unwrap_or(0)
+    }
+
+    fn get_bundle_max_payload_size_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.bundle_max_payload_size
+    }
+
+    fn mut_bundle_max_payload_size_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.bundle_max_payload_size
     }
 
     // optional .EncryptionKeyInfo encryption_key = 3;
@@ -529,6 +557,14 @@ impl StorageInfo {
 
     pub fn get_encryption_key(&self) -> &EncryptionKeyInfo {
         self.encryption_key.as_ref().unwrap_or_else(|| EncryptionKeyInfo::default_instance())
+    }
+
+    fn get_encryption_key_for_reflect(&self) -> &::protobuf::SingularPtrField<EncryptionKeyInfo> {
+        &self.encryption_key
+    }
+
+    fn mut_encryption_key_for_reflect(&mut self) -> &mut ::protobuf::SingularPtrField<EncryptionKeyInfo> {
+        &mut self.encryption_key
     }
 
     // optional string default_compression_method = 4;
@@ -566,6 +602,14 @@ impl StorageInfo {
             None => "lzma",
         }
     }
+
+    fn get_default_compression_method_for_reflect(&self) -> &::protobuf::SingularField<::std::string::String> {
+        &self.default_compression_method
+    }
+
+    fn mut_default_compression_method_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::string::String> {
+        &mut self.default_compression_method
+    }
 }
 
 impl ::protobuf::Message for StorageInfo {
@@ -574,31 +618,31 @@ impl ::protobuf::Message for StorageInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.chunk_max_size = ::std::option::Option::Some(tmp);
                 },
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.bundle_max_payload_size = ::std::option::Option::Some(tmp);
                 },
                 3 => {
-                    try!(::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.encryption_key));
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.encryption_key)?;
                 },
                 4 => {
-                    try!(::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.default_compression_method));
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.default_compression_method)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -609,18 +653,18 @@ impl ::protobuf::Message for StorageInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.chunk_max_size {
-            my_size += ::protobuf::rt::value_size(1, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.chunk_max_size {
+            my_size += ::protobuf::rt::value_size(1, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.bundle_max_payload_size {
-            my_size += ::protobuf::rt::value_size(2, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.bundle_max_payload_size {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.encryption_key {
-            let len = value.compute_size();
+        if let Some(v) = self.encryption_key.as_ref() {
+            let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
-        for value in &self.default_compression_method {
-            my_size += ::protobuf::rt::string_size(4, &value);
+        if let Some(v) = self.default_compression_method.as_ref() {
+            my_size += ::protobuf::rt::string_size(4, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -629,20 +673,20 @@ impl ::protobuf::Message for StorageInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.chunk_max_size {
-            try!(os.write_uint32(1, v));
+            os.write_uint32(1, v)?;
         };
         if let Some(v) = self.bundle_max_payload_size {
-            try!(os.write_uint32(2, v));
+            os.write_uint32(2, v)?;
         };
         if let Some(v) = self.encryption_key.as_ref() {
-            try!(os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
         if let Some(v) = self.default_compression_method.as_ref() {
-            try!(os.write_string(4, &v));
+            os.write_string(4, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -656,10 +700,6 @@ impl ::protobuf::Message for StorageInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<StorageInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -684,25 +724,25 @@ impl ::protobuf::MessageStatic for StorageInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "chunk_max_size",
-                    StorageInfo::has_chunk_max_size,
-                    StorageInfo::get_chunk_max_size,
+                    StorageInfo::get_chunk_max_size_for_reflect,
+                    StorageInfo::mut_chunk_max_size_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "bundle_max_payload_size",
-                    StorageInfo::has_bundle_max_payload_size,
-                    StorageInfo::get_bundle_max_payload_size,
+                    StorageInfo::get_bundle_max_payload_size_for_reflect,
+                    StorageInfo::mut_bundle_max_payload_size_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<EncryptionKeyInfo>>(
                     "encryption_key",
-                    StorageInfo::has_encryption_key,
-                    StorageInfo::get_encryption_key,
+                    StorageInfo::get_encryption_key_for_reflect,
+                    StorageInfo::mut_encryption_key_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_string_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
                     "default_compression_method",
-                    StorageInfo::has_default_compression_method,
-                    StorageInfo::get_default_compression_method,
+                    StorageInfo::get_default_compression_method_for_reflect,
+                    StorageInfo::mut_default_compression_method_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<StorageInfo>(
                     "StorageInfo",
@@ -724,29 +764,25 @@ impl ::protobuf::Clear for StorageInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for StorageInfo {
-    fn eq(&self, other: &StorageInfo) -> bool {
-        self.chunk_max_size == other.chunk_max_size &&
-        self.bundle_max_payload_size == other.bundle_max_payload_size &&
-        self.encryption_key == other.encryption_key &&
-        self.default_compression_method == other.default_compression_method &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for StorageInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for StorageInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct LZMAConfigInfo {
     // message fields
     compression_level: ::std::option::Option<u32>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -763,13 +799,7 @@ impl LZMAConfigInfo {
             ptr: 0 as *const LZMAConfigInfo,
         };
         unsafe {
-            instance.get(|| {
-                LZMAConfigInfo {
-                    compression_level: ::std::option::Option::None,
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(LZMAConfigInfo::new)
         }
     }
 
@@ -791,6 +821,14 @@ impl LZMAConfigInfo {
     pub fn get_compression_level(&self) -> u32 {
         self.compression_level.unwrap_or(6u32)
     }
+
+    fn get_compression_level_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.compression_level
+    }
+
+    fn mut_compression_level_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.compression_level
+    }
 }
 
 impl ::protobuf::Message for LZMAConfigInfo {
@@ -799,18 +837,18 @@ impl ::protobuf::Message for LZMAConfigInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.compression_level = ::std::option::Option::Some(tmp);
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -821,8 +859,8 @@ impl ::protobuf::Message for LZMAConfigInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.compression_level {
-            my_size += ::protobuf::rt::value_size(1, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.compression_level {
+            my_size += ::protobuf::rt::value_size(1, v, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -831,9 +869,9 @@ impl ::protobuf::Message for LZMAConfigInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.compression_level {
-            try!(os.write_uint32(1, v));
+            os.write_uint32(1, v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -847,10 +885,6 @@ impl ::protobuf::Message for LZMAConfigInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<LZMAConfigInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -875,10 +909,10 @@ impl ::protobuf::MessageStatic for LZMAConfigInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "compression_level",
-                    LZMAConfigInfo::has_compression_level,
-                    LZMAConfigInfo::get_compression_level,
+                    LZMAConfigInfo::get_compression_level_for_reflect,
+                    LZMAConfigInfo::mut_compression_level_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<LZMAConfigInfo>(
                     "LZMAConfigInfo",
@@ -897,26 +931,25 @@ impl ::protobuf::Clear for LZMAConfigInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for LZMAConfigInfo {
-    fn eq(&self, other: &LZMAConfigInfo) -> bool {
-        self.compression_level == other.compression_level &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for LZMAConfigInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for LZMAConfigInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct ChunkConfigInfo {
     // message fields
     max_size: ::std::option::Option<u32>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -933,13 +966,7 @@ impl ChunkConfigInfo {
             ptr: 0 as *const ChunkConfigInfo,
         };
         unsafe {
-            instance.get(|| {
-                ChunkConfigInfo {
-                    max_size: ::std::option::Option::None,
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(ChunkConfigInfo::new)
         }
     }
 
@@ -961,6 +988,14 @@ impl ChunkConfigInfo {
     pub fn get_max_size(&self) -> u32 {
         self.max_size.unwrap_or(65536u32)
     }
+
+    fn get_max_size_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.max_size
+    }
+
+    fn mut_max_size_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.max_size
+    }
 }
 
 impl ::protobuf::Message for ChunkConfigInfo {
@@ -972,18 +1007,18 @@ impl ::protobuf::Message for ChunkConfigInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.max_size = ::std::option::Option::Some(tmp);
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -994,8 +1029,8 @@ impl ::protobuf::Message for ChunkConfigInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.max_size {
-            my_size += ::protobuf::rt::value_size(1, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.max_size {
+            my_size += ::protobuf::rt::value_size(1, v, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1004,9 +1039,9 @@ impl ::protobuf::Message for ChunkConfigInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.max_size {
-            try!(os.write_uint32(1, v));
+            os.write_uint32(1, v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -1020,10 +1055,6 @@ impl ::protobuf::Message for ChunkConfigInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<ChunkConfigInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -1048,10 +1079,10 @@ impl ::protobuf::MessageStatic for ChunkConfigInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "max_size",
-                    ChunkConfigInfo::has_max_size,
-                    ChunkConfigInfo::get_max_size,
+                    ChunkConfigInfo::get_max_size_for_reflect,
+                    ChunkConfigInfo::mut_max_size_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ChunkConfigInfo>(
                     "ChunkConfigInfo",
@@ -1070,27 +1101,26 @@ impl ::protobuf::Clear for ChunkConfigInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for ChunkConfigInfo {
-    fn eq(&self, other: &ChunkConfigInfo) -> bool {
-        self.max_size == other.max_size &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for ChunkConfigInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for ChunkConfigInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BundleConfigInfo {
     // message fields
     max_payload_size: ::std::option::Option<u32>,
     compression_method: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -1107,14 +1137,7 @@ impl BundleConfigInfo {
             ptr: 0 as *const BundleConfigInfo,
         };
         unsafe {
-            instance.get(|| {
-                BundleConfigInfo {
-                    max_payload_size: ::std::option::Option::None,
-                    compression_method: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BundleConfigInfo::new)
         }
     }
 
@@ -1135,6 +1158,14 @@ impl BundleConfigInfo {
 
     pub fn get_max_payload_size(&self) -> u32 {
         self.max_payload_size.unwrap_or(2097152u32)
+    }
+
+    fn get_max_payload_size_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.max_payload_size
+    }
+
+    fn mut_max_payload_size_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.max_payload_size
     }
 
     // optional string compression_method = 3;
@@ -1172,6 +1203,14 @@ impl BundleConfigInfo {
             None => "lzma",
         }
     }
+
+    fn get_compression_method_for_reflect(&self) -> &::protobuf::SingularField<::std::string::String> {
+        &self.compression_method
+    }
+
+    fn mut_compression_method_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::string::String> {
+        &mut self.compression_method
+    }
 }
 
 impl ::protobuf::Message for BundleConfigInfo {
@@ -1183,21 +1222,21 @@ impl ::protobuf::Message for BundleConfigInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.max_payload_size = ::std::option::Option::Some(tmp);
                 },
                 3 => {
-                    try!(::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.compression_method));
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.compression_method)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -1208,11 +1247,11 @@ impl ::protobuf::Message for BundleConfigInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.max_payload_size {
-            my_size += ::protobuf::rt::value_size(2, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.max_payload_size {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.compression_method {
-            my_size += ::protobuf::rt::string_size(3, &value);
+        if let Some(v) = self.compression_method.as_ref() {
+            my_size += ::protobuf::rt::string_size(3, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1221,12 +1260,12 @@ impl ::protobuf::Message for BundleConfigInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.max_payload_size {
-            try!(os.write_uint32(2, v));
+            os.write_uint32(2, v)?;
         };
         if let Some(v) = self.compression_method.as_ref() {
-            try!(os.write_string(3, &v));
+            os.write_string(3, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -1240,10 +1279,6 @@ impl ::protobuf::Message for BundleConfigInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BundleConfigInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -1268,15 +1303,15 @@ impl ::protobuf::MessageStatic for BundleConfigInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "max_payload_size",
-                    BundleConfigInfo::has_max_payload_size,
-                    BundleConfigInfo::get_max_payload_size,
+                    BundleConfigInfo::get_max_payload_size_for_reflect,
+                    BundleConfigInfo::mut_max_payload_size_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_string_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
                     "compression_method",
-                    BundleConfigInfo::has_compression_method,
-                    BundleConfigInfo::get_compression_method,
+                    BundleConfigInfo::get_compression_method_for_reflect,
+                    BundleConfigInfo::mut_compression_method_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BundleConfigInfo>(
                     "BundleConfigInfo",
@@ -1296,21 +1331,19 @@ impl ::protobuf::Clear for BundleConfigInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for BundleConfigInfo {
-    fn eq(&self, other: &BundleConfigInfo) -> bool {
-        self.max_payload_size == other.max_payload_size &&
-        self.compression_method == other.compression_method &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BundleConfigInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for BundleConfigInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct ConfigInfo {
     // message fields
     chunk: ::protobuf::SingularPtrField<ChunkConfigInfo>,
@@ -1318,7 +1351,7 @@ pub struct ConfigInfo {
     lzma: ::protobuf::SingularPtrField<LZMAConfigInfo>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -1335,15 +1368,7 @@ impl ConfigInfo {
             ptr: 0 as *const ConfigInfo,
         };
         unsafe {
-            instance.get(|| {
-                ConfigInfo {
-                    chunk: ::protobuf::SingularPtrField::none(),
-                    bundle: ::protobuf::SingularPtrField::none(),
-                    lzma: ::protobuf::SingularPtrField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(ConfigInfo::new)
         }
     }
 
@@ -1380,6 +1405,14 @@ impl ConfigInfo {
         self.chunk.as_ref().unwrap_or_else(|| ChunkConfigInfo::default_instance())
     }
 
+    fn get_chunk_for_reflect(&self) -> &::protobuf::SingularPtrField<ChunkConfigInfo> {
+        &self.chunk
+    }
+
+    fn mut_chunk_for_reflect(&mut self) -> &mut ::protobuf::SingularPtrField<ChunkConfigInfo> {
+        &mut self.chunk
+    }
+
     // required .BundleConfigInfo bundle = 2;
 
     pub fn clear_bundle(&mut self) {
@@ -1411,6 +1444,14 @@ impl ConfigInfo {
 
     pub fn get_bundle(&self) -> &BundleConfigInfo {
         self.bundle.as_ref().unwrap_or_else(|| BundleConfigInfo::default_instance())
+    }
+
+    fn get_bundle_for_reflect(&self) -> &::protobuf::SingularPtrField<BundleConfigInfo> {
+        &self.bundle
+    }
+
+    fn mut_bundle_for_reflect(&mut self) -> &mut ::protobuf::SingularPtrField<BundleConfigInfo> {
+        &mut self.bundle
     }
 
     // required .LZMAConfigInfo lzma = 3;
@@ -1445,6 +1486,14 @@ impl ConfigInfo {
     pub fn get_lzma(&self) -> &LZMAConfigInfo {
         self.lzma.as_ref().unwrap_or_else(|| LZMAConfigInfo::default_instance())
     }
+
+    fn get_lzma_for_reflect(&self) -> &::protobuf::SingularPtrField<LZMAConfigInfo> {
+        &self.lzma
+    }
+
+    fn mut_lzma_for_reflect(&mut self) -> &mut ::protobuf::SingularPtrField<LZMAConfigInfo> {
+        &mut self.lzma
+    }
 }
 
 impl ::protobuf::Message for ConfigInfo {
@@ -1462,20 +1511,20 @@ impl ::protobuf::Message for ConfigInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.chunk));
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.chunk)?;
                 },
                 2 => {
-                    try!(::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.bundle));
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.bundle)?;
                 },
                 3 => {
-                    try!(::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.lzma));
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.lzma)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -1486,16 +1535,16 @@ impl ::protobuf::Message for ConfigInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.chunk {
-            let len = value.compute_size();
+        if let Some(v) = self.chunk.as_ref() {
+            let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
-        for value in &self.bundle {
-            let len = value.compute_size();
+        if let Some(v) = self.bundle.as_ref() {
+            let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
-        for value in &self.lzma {
-            let len = value.compute_size();
+        if let Some(v) = self.lzma.as_ref() {
+            let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -1505,21 +1554,21 @@ impl ::protobuf::Message for ConfigInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.chunk.as_ref() {
-            try!(os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
         if let Some(v) = self.bundle.as_ref() {
-            try!(os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
         if let Some(v) = self.lzma.as_ref() {
-            try!(os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -1533,10 +1582,6 @@ impl ::protobuf::Message for ConfigInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<ConfigInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -1561,20 +1606,20 @@ impl ::protobuf::MessageStatic for ConfigInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<ChunkConfigInfo>>(
                     "chunk",
-                    ConfigInfo::has_chunk,
-                    ConfigInfo::get_chunk,
+                    ConfigInfo::get_chunk_for_reflect,
+                    ConfigInfo::mut_chunk_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<BundleConfigInfo>>(
                     "bundle",
-                    ConfigInfo::has_bundle,
-                    ConfigInfo::get_bundle,
+                    ConfigInfo::get_bundle_for_reflect,
+                    ConfigInfo::mut_bundle_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<LZMAConfigInfo>>(
                     "lzma",
-                    ConfigInfo::has_lzma,
-                    ConfigInfo::get_lzma,
+                    ConfigInfo::get_lzma_for_reflect,
+                    ConfigInfo::mut_lzma_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ConfigInfo>(
                     "ConfigInfo",
@@ -1595,28 +1640,25 @@ impl ::protobuf::Clear for ConfigInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for ConfigInfo {
-    fn eq(&self, other: &ConfigInfo) -> bool {
-        self.chunk == other.chunk &&
-        self.bundle == other.bundle &&
-        self.lzma == other.lzma &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for ConfigInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for ConfigInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct ExtendedStorageInfo {
     // message fields
     config: ::protobuf::SingularPtrField<ConfigInfo>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -1633,13 +1675,7 @@ impl ExtendedStorageInfo {
             ptr: 0 as *const ExtendedStorageInfo,
         };
         unsafe {
-            instance.get(|| {
-                ExtendedStorageInfo {
-                    config: ::protobuf::SingularPtrField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(ExtendedStorageInfo::new)
         }
     }
 
@@ -1675,6 +1711,14 @@ impl ExtendedStorageInfo {
     pub fn get_config(&self) -> &ConfigInfo {
         self.config.as_ref().unwrap_or_else(|| ConfigInfo::default_instance())
     }
+
+    fn get_config_for_reflect(&self) -> &::protobuf::SingularPtrField<ConfigInfo> {
+        &self.config
+    }
+
+    fn mut_config_for_reflect(&mut self) -> &mut ::protobuf::SingularPtrField<ConfigInfo> {
+        &mut self.config
+    }
 }
 
 impl ::protobuf::Message for ExtendedStorageInfo {
@@ -1683,14 +1727,14 @@ impl ::protobuf::Message for ExtendedStorageInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.config));
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.config)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -1701,8 +1745,8 @@ impl ::protobuf::Message for ExtendedStorageInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.config {
-            let len = value.compute_size();
+        if let Some(v) = self.config.as_ref() {
+            let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -1712,11 +1756,11 @@ impl ::protobuf::Message for ExtendedStorageInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.config.as_ref() {
-            try!(os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -1730,10 +1774,6 @@ impl ::protobuf::Message for ExtendedStorageInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<ExtendedStorageInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -1758,10 +1798,10 @@ impl ::protobuf::MessageStatic for ExtendedStorageInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<ConfigInfo>>(
                     "config",
-                    ExtendedStorageInfo::has_config,
-                    ExtendedStorageInfo::get_config,
+                    ExtendedStorageInfo::get_config_for_reflect,
+                    ExtendedStorageInfo::mut_config_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ExtendedStorageInfo>(
                     "ExtendedStorageInfo",
@@ -1780,26 +1820,25 @@ impl ::protobuf::Clear for ExtendedStorageInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for ExtendedStorageInfo {
-    fn eq(&self, other: &ExtendedStorageInfo) -> bool {
-        self.config == other.config &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for ExtendedStorageInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for ExtendedStorageInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BundleInfo {
     // message fields
     chunk_record: ::protobuf::RepeatedField<BundleInfo_ChunkRecord>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -1816,13 +1855,7 @@ impl BundleInfo {
             ptr: 0 as *const BundleInfo,
         };
         unsafe {
-            instance.get(|| {
-                BundleInfo {
-                    chunk_record: ::protobuf::RepeatedField::new(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BundleInfo::new)
         }
     }
 
@@ -1850,6 +1883,14 @@ impl BundleInfo {
     pub fn get_chunk_record(&self) -> &[BundleInfo_ChunkRecord] {
         &self.chunk_record
     }
+
+    fn get_chunk_record_for_reflect(&self) -> &::protobuf::RepeatedField<BundleInfo_ChunkRecord> {
+        &self.chunk_record
+    }
+
+    fn mut_chunk_record_for_reflect(&mut self) -> &mut ::protobuf::RepeatedField<BundleInfo_ChunkRecord> {
+        &mut self.chunk_record
+    }
 }
 
 impl ::protobuf::Message for BundleInfo {
@@ -1858,14 +1899,14 @@ impl ::protobuf::Message for BundleInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.chunk_record));
+                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.chunk_record)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -1887,11 +1928,11 @@ impl ::protobuf::Message for BundleInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         for v in &self.chunk_record {
-            try!(os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited));
-            try!(os.write_raw_varint32(v.get_cached_size()));
-            try!(v.write_to_with_cached_sizes(os));
+            os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -1905,10 +1946,6 @@ impl ::protobuf::Message for BundleInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BundleInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -1933,9 +1970,10 @@ impl ::protobuf::MessageStatic for BundleInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_repeated_message_accessor(
+                fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<BundleInfo_ChunkRecord>>(
                     "chunk_record",
-                    BundleInfo::get_chunk_record,
+                    BundleInfo::get_chunk_record_for_reflect,
+                    BundleInfo::mut_chunk_record_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BundleInfo>(
                     "BundleInfo",
@@ -1954,27 +1992,26 @@ impl ::protobuf::Clear for BundleInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for BundleInfo {
-    fn eq(&self, other: &BundleInfo) -> bool {
-        self.chunk_record == other.chunk_record &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BundleInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for BundleInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BundleInfo_ChunkRecord {
     // message fields
     id: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     size: ::std::option::Option<u32>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -1991,14 +2028,7 @@ impl BundleInfo_ChunkRecord {
             ptr: 0 as *const BundleInfo_ChunkRecord,
         };
         unsafe {
-            instance.get(|| {
-                BundleInfo_ChunkRecord {
-                    id: ::protobuf::SingularField::none(),
-                    size: ::std::option::Option::None,
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BundleInfo_ChunkRecord::new)
         }
     }
 
@@ -2038,6 +2068,14 @@ impl BundleInfo_ChunkRecord {
         }
     }
 
+    fn get_id_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.id
+    }
+
+    fn mut_id_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.id
+    }
+
     // required uint32 size = 2;
 
     pub fn clear_size(&mut self) {
@@ -2056,6 +2094,14 @@ impl BundleInfo_ChunkRecord {
     pub fn get_size(&self) -> u32 {
         self.size.unwrap_or(0)
     }
+
+    fn get_size_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.size
+    }
+
+    fn mut_size_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.size
+    }
 }
 
 impl ::protobuf::Message for BundleInfo_ChunkRecord {
@@ -2070,21 +2116,21 @@ impl ::protobuf::Message for BundleInfo_ChunkRecord {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id)?;
                 },
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.size = ::std::option::Option::Some(tmp);
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -2095,11 +2141,11 @@ impl ::protobuf::Message for BundleInfo_ChunkRecord {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.id {
-            my_size += ::protobuf::rt::bytes_size(1, &value);
+        if let Some(v) = self.id.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         };
-        for value in &self.size {
-            my_size += ::protobuf::rt::value_size(2, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.size {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2108,12 +2154,12 @@ impl ::protobuf::Message for BundleInfo_ChunkRecord {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.id.as_ref() {
-            try!(os.write_bytes(1, &v));
+            os.write_bytes(1, &v)?;
         };
         if let Some(v) = self.size {
-            try!(os.write_uint32(2, v));
+            os.write_uint32(2, v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -2127,10 +2173,6 @@ impl ::protobuf::Message for BundleInfo_ChunkRecord {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BundleInfo_ChunkRecord>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -2155,15 +2197,15 @@ impl ::protobuf::MessageStatic for BundleInfo_ChunkRecord {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "id",
-                    BundleInfo_ChunkRecord::has_id,
-                    BundleInfo_ChunkRecord::get_id,
+                    BundleInfo_ChunkRecord::get_id_for_reflect,
+                    BundleInfo_ChunkRecord::mut_id_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "size",
-                    BundleInfo_ChunkRecord::has_size,
-                    BundleInfo_ChunkRecord::get_size,
+                    BundleInfo_ChunkRecord::get_size_for_reflect,
+                    BundleInfo_ChunkRecord::mut_size_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BundleInfo_ChunkRecord>(
                     "BundleInfo_ChunkRecord",
@@ -2183,27 +2225,25 @@ impl ::protobuf::Clear for BundleInfo_ChunkRecord {
     }
 }
 
-impl ::std::cmp::PartialEq for BundleInfo_ChunkRecord {
-    fn eq(&self, other: &BundleInfo_ChunkRecord) -> bool {
-        self.id == other.id &&
-        self.size == other.size &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BundleInfo_ChunkRecord {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for BundleInfo_ChunkRecord {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct FileHeader {
     // message fields
     version: ::std::option::Option<u32>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -2220,13 +2260,7 @@ impl FileHeader {
             ptr: 0 as *const FileHeader,
         };
         unsafe {
-            instance.get(|| {
-                FileHeader {
-                    version: ::std::option::Option::None,
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(FileHeader::new)
         }
     }
 
@@ -2248,6 +2282,14 @@ impl FileHeader {
     pub fn get_version(&self) -> u32 {
         self.version.unwrap_or(0)
     }
+
+    fn get_version_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.version
+    }
+
+    fn mut_version_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.version
+    }
 }
 
 impl ::protobuf::Message for FileHeader {
@@ -2259,18 +2301,18 @@ impl ::protobuf::Message for FileHeader {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.version = ::std::option::Option::Some(tmp);
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -2281,8 +2323,8 @@ impl ::protobuf::Message for FileHeader {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.version {
-            my_size += ::protobuf::rt::value_size(1, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.version {
+            my_size += ::protobuf::rt::value_size(1, v, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2291,9 +2333,9 @@ impl ::protobuf::Message for FileHeader {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.version {
-            try!(os.write_uint32(1, v));
+            os.write_uint32(1, v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -2307,10 +2349,6 @@ impl ::protobuf::Message for FileHeader {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<FileHeader>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -2335,10 +2373,10 @@ impl ::protobuf::MessageStatic for FileHeader {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "version",
-                    FileHeader::has_version,
-                    FileHeader::get_version,
+                    FileHeader::get_version_for_reflect,
+                    FileHeader::mut_version_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<FileHeader>(
                     "FileHeader",
@@ -2357,27 +2395,26 @@ impl ::protobuf::Clear for FileHeader {
     }
 }
 
-impl ::std::cmp::PartialEq for FileHeader {
-    fn eq(&self, other: &FileHeader) -> bool {
-        self.version == other.version &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for FileHeader {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for FileHeader {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BundleFileHeader {
     // message fields
     version: ::std::option::Option<u32>,
     compression_method: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -2394,14 +2431,7 @@ impl BundleFileHeader {
             ptr: 0 as *const BundleFileHeader,
         };
         unsafe {
-            instance.get(|| {
-                BundleFileHeader {
-                    version: ::std::option::Option::None,
-                    compression_method: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BundleFileHeader::new)
         }
     }
 
@@ -2422,6 +2452,14 @@ impl BundleFileHeader {
 
     pub fn get_version(&self) -> u32 {
         self.version.unwrap_or(0)
+    }
+
+    fn get_version_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.version
+    }
+
+    fn mut_version_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.version
     }
 
     // optional string compression_method = 2;
@@ -2459,6 +2497,14 @@ impl BundleFileHeader {
             None => "lzma",
         }
     }
+
+    fn get_compression_method_for_reflect(&self) -> &::protobuf::SingularField<::std::string::String> {
+        &self.compression_method
+    }
+
+    fn mut_compression_method_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::string::String> {
+        &mut self.compression_method
+    }
 }
 
 impl ::protobuf::Message for BundleFileHeader {
@@ -2470,21 +2516,21 @@ impl ::protobuf::Message for BundleFileHeader {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.version = ::std::option::Option::Some(tmp);
                 },
                 2 => {
-                    try!(::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.compression_method));
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.compression_method)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -2495,11 +2541,11 @@ impl ::protobuf::Message for BundleFileHeader {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.version {
-            my_size += ::protobuf::rt::value_size(1, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.version {
+            my_size += ::protobuf::rt::value_size(1, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.compression_method {
-            my_size += ::protobuf::rt::string_size(2, &value);
+        if let Some(v) = self.compression_method.as_ref() {
+            my_size += ::protobuf::rt::string_size(2, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2508,12 +2554,12 @@ impl ::protobuf::Message for BundleFileHeader {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.version {
-            try!(os.write_uint32(1, v));
+            os.write_uint32(1, v)?;
         };
         if let Some(v) = self.compression_method.as_ref() {
-            try!(os.write_string(2, &v));
+            os.write_string(2, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -2527,10 +2573,6 @@ impl ::protobuf::Message for BundleFileHeader {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BundleFileHeader>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -2555,15 +2597,15 @@ impl ::protobuf::MessageStatic for BundleFileHeader {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "version",
-                    BundleFileHeader::has_version,
-                    BundleFileHeader::get_version,
+                    BundleFileHeader::get_version_for_reflect,
+                    BundleFileHeader::mut_version_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_string_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
                     "compression_method",
-                    BundleFileHeader::has_compression_method,
-                    BundleFileHeader::get_compression_method,
+                    BundleFileHeader::get_compression_method_for_reflect,
+                    BundleFileHeader::mut_compression_method_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BundleFileHeader>(
                     "BundleFileHeader",
@@ -2583,27 +2625,25 @@ impl ::protobuf::Clear for BundleFileHeader {
     }
 }
 
-impl ::std::cmp::PartialEq for BundleFileHeader {
-    fn eq(&self, other: &BundleFileHeader) -> bool {
-        self.version == other.version &&
-        self.compression_method == other.compression_method &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BundleFileHeader {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for BundleFileHeader {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct IndexBundleHeader {
     // message fields
     id: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -2620,13 +2660,7 @@ impl IndexBundleHeader {
             ptr: 0 as *const IndexBundleHeader,
         };
         unsafe {
-            instance.get(|| {
-                IndexBundleHeader {
-                    id: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(IndexBundleHeader::new)
         }
     }
 
@@ -2665,6 +2699,14 @@ impl IndexBundleHeader {
             None => &[],
         }
     }
+
+    fn get_id_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.id
+    }
+
+    fn mut_id_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.id
+    }
 }
 
 impl ::protobuf::Message for IndexBundleHeader {
@@ -2673,14 +2715,14 @@ impl ::protobuf::Message for IndexBundleHeader {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -2691,8 +2733,8 @@ impl ::protobuf::Message for IndexBundleHeader {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.id {
-            my_size += ::protobuf::rt::bytes_size(1, &value);
+        if let Some(v) = self.id.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2701,9 +2743,9 @@ impl ::protobuf::Message for IndexBundleHeader {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.id.as_ref() {
-            try!(os.write_bytes(1, &v));
+            os.write_bytes(1, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -2717,10 +2759,6 @@ impl ::protobuf::Message for IndexBundleHeader {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<IndexBundleHeader>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -2745,10 +2783,10 @@ impl ::protobuf::MessageStatic for IndexBundleHeader {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "id",
-                    IndexBundleHeader::has_id,
-                    IndexBundleHeader::get_id,
+                    IndexBundleHeader::get_id_for_reflect,
+                    IndexBundleHeader::mut_id_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<IndexBundleHeader>(
                     "IndexBundleHeader",
@@ -2767,27 +2805,26 @@ impl ::protobuf::Clear for IndexBundleHeader {
     }
 }
 
-impl ::std::cmp::PartialEq for IndexBundleHeader {
-    fn eq(&self, other: &IndexBundleHeader) -> bool {
-        self.id == other.id &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for IndexBundleHeader {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for IndexBundleHeader {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BackupInstruction {
     // message fields
     chunk_to_emit: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     bytes_to_emit: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -2804,14 +2841,7 @@ impl BackupInstruction {
             ptr: 0 as *const BackupInstruction,
         };
         unsafe {
-            instance.get(|| {
-                BackupInstruction {
-                    chunk_to_emit: ::protobuf::SingularField::none(),
-                    bytes_to_emit: ::protobuf::SingularField::none(),
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BackupInstruction::new)
         }
     }
 
@@ -2851,6 +2881,14 @@ impl BackupInstruction {
         }
     }
 
+    fn get_chunk_to_emit_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.chunk_to_emit
+    }
+
+    fn mut_chunk_to_emit_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.chunk_to_emit
+    }
+
     // optional bytes bytes_to_emit = 2;
 
     pub fn clear_bytes_to_emit(&mut self) {
@@ -2886,6 +2924,14 @@ impl BackupInstruction {
             None => &[],
         }
     }
+
+    fn get_bytes_to_emit_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.bytes_to_emit
+    }
+
+    fn mut_bytes_to_emit_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.bytes_to_emit
+    }
 }
 
 impl ::protobuf::Message for BackupInstruction {
@@ -2894,17 +2940,17 @@ impl ::protobuf::Message for BackupInstruction {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.chunk_to_emit));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.chunk_to_emit)?;
                 },
                 2 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.bytes_to_emit));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.bytes_to_emit)?;
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -2915,11 +2961,11 @@ impl ::protobuf::Message for BackupInstruction {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.chunk_to_emit {
-            my_size += ::protobuf::rt::bytes_size(1, &value);
+        if let Some(v) = self.chunk_to_emit.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         };
-        for value in &self.bytes_to_emit {
-            my_size += ::protobuf::rt::bytes_size(2, &value);
+        if let Some(v) = self.bytes_to_emit.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(2, &v);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2928,12 +2974,12 @@ impl ::protobuf::Message for BackupInstruction {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.chunk_to_emit.as_ref() {
-            try!(os.write_bytes(1, &v));
+            os.write_bytes(1, &v)?;
         };
         if let Some(v) = self.bytes_to_emit.as_ref() {
-            try!(os.write_bytes(2, &v));
+            os.write_bytes(2, &v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -2947,10 +2993,6 @@ impl ::protobuf::Message for BackupInstruction {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BackupInstruction>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -2975,15 +3017,15 @@ impl ::protobuf::MessageStatic for BackupInstruction {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "chunk_to_emit",
-                    BackupInstruction::has_chunk_to_emit,
-                    BackupInstruction::get_chunk_to_emit,
+                    BackupInstruction::get_chunk_to_emit_for_reflect,
+                    BackupInstruction::mut_chunk_to_emit_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "bytes_to_emit",
-                    BackupInstruction::has_bytes_to_emit,
-                    BackupInstruction::get_bytes_to_emit,
+                    BackupInstruction::get_bytes_to_emit_for_reflect,
+                    BackupInstruction::mut_bytes_to_emit_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BackupInstruction>(
                     "BackupInstruction",
@@ -3003,21 +3045,19 @@ impl ::protobuf::Clear for BackupInstruction {
     }
 }
 
-impl ::std::cmp::PartialEq for BackupInstruction {
-    fn eq(&self, other: &BackupInstruction) -> bool {
-        self.chunk_to_emit == other.chunk_to_emit &&
-        self.bytes_to_emit == other.bytes_to_emit &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BackupInstruction {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-#[derive(Clone,Default)]
+impl ::protobuf::reflect::ProtobufValue for BackupInstruction {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
 pub struct BackupInfo {
     // message fields
     backup_data: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -3027,7 +3067,7 @@ pub struct BackupInfo {
     time: ::std::option::Option<i64>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::std::cell::Cell<u32>,
+    cached_size: ::protobuf::CachedSize,
 }
 
 // see codegen.rs for the explanation why impl Sync explicitly
@@ -3044,17 +3084,7 @@ impl BackupInfo {
             ptr: 0 as *const BackupInfo,
         };
         unsafe {
-            instance.get(|| {
-                BackupInfo {
-                    backup_data: ::protobuf::SingularField::none(),
-                    iterations: ::std::option::Option::None,
-                    size: ::std::option::Option::None,
-                    sha256: ::protobuf::SingularField::none(),
-                    time: ::std::option::Option::None,
-                    unknown_fields: ::protobuf::UnknownFields::new(),
-                    cached_size: ::std::cell::Cell::new(0),
-                }
-            })
+            instance.get(BackupInfo::new)
         }
     }
 
@@ -3094,6 +3124,14 @@ impl BackupInfo {
         }
     }
 
+    fn get_backup_data_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.backup_data
+    }
+
+    fn mut_backup_data_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.backup_data
+    }
+
     // optional uint32 iterations = 2;
 
     pub fn clear_iterations(&mut self) {
@@ -3113,6 +3151,14 @@ impl BackupInfo {
         self.iterations.unwrap_or(0u32)
     }
 
+    fn get_iterations_for_reflect(&self) -> &::std::option::Option<u32> {
+        &self.iterations
+    }
+
+    fn mut_iterations_for_reflect(&mut self) -> &mut ::std::option::Option<u32> {
+        &mut self.iterations
+    }
+
     // required uint64 size = 3;
 
     pub fn clear_size(&mut self) {
@@ -3130,6 +3176,14 @@ impl BackupInfo {
 
     pub fn get_size(&self) -> u64 {
         self.size.unwrap_or(0)
+    }
+
+    fn get_size_for_reflect(&self) -> &::std::option::Option<u64> {
+        &self.size
+    }
+
+    fn mut_size_for_reflect(&mut self) -> &mut ::std::option::Option<u64> {
+        &mut self.size
     }
 
     // required bytes sha256 = 4;
@@ -3168,6 +3222,14 @@ impl BackupInfo {
         }
     }
 
+    fn get_sha256_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &self.sha256
+    }
+
+    fn mut_sha256_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
+        &mut self.sha256
+    }
+
     // optional int64 time = 5;
 
     pub fn clear_time(&mut self) {
@@ -3186,6 +3248,14 @@ impl BackupInfo {
     pub fn get_time(&self) -> i64 {
         self.time.unwrap_or(0)
     }
+
+    fn get_time_for_reflect(&self) -> &::std::option::Option<i64> {
+        &self.time
+    }
+
+    fn mut_time_for_reflect(&mut self) -> &mut ::std::option::Option<i64> {
+        &mut self.time
+    }
 }
 
 impl ::protobuf::Message for BackupInfo {
@@ -3203,38 +3273,38 @@ impl ::protobuf::Message for BackupInfo {
     }
 
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !try!(is.eof()) {
-            let (field_number, wire_type) = try!(is.read_tag_unpack());
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.backup_data));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.backup_data)?;
                 },
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint32());
+                    let tmp = is.read_uint32()?;
                     self.iterations = ::std::option::Option::Some(tmp);
                 },
                 3 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_uint64());
+                    let tmp = is.read_uint64()?;
                     self.size = ::std::option::Option::Some(tmp);
                 },
                 4 => {
-                    try!(::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.sha256));
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.sha256)?;
                 },
                 5 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     };
-                    let tmp = try!(is.read_int64());
+                    let tmp = is.read_int64()?;
                     self.time = ::std::option::Option::Some(tmp);
                 },
                 _ => {
-                    try!(::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields()));
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
             };
         }
@@ -3245,20 +3315,20 @@ impl ::protobuf::Message for BackupInfo {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.backup_data {
-            my_size += ::protobuf::rt::bytes_size(1, &value);
+        if let Some(v) = self.backup_data.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         };
-        for value in &self.iterations {
-            my_size += ::protobuf::rt::value_size(2, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.iterations {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.size {
-            my_size += ::protobuf::rt::value_size(3, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.size {
+            my_size += ::protobuf::rt::value_size(3, v, ::protobuf::wire_format::WireTypeVarint);
         };
-        for value in &self.sha256 {
-            my_size += ::protobuf::rt::bytes_size(4, &value);
+        if let Some(v) = self.sha256.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(4, &v);
         };
-        for value in &self.time {
-            my_size += ::protobuf::rt::value_size(5, *value, ::protobuf::wire_format::WireTypeVarint);
+        if let Some(v) = self.time {
+            my_size += ::protobuf::rt::value_size(5, v, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -3267,21 +3337,21 @@ impl ::protobuf::Message for BackupInfo {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.backup_data.as_ref() {
-            try!(os.write_bytes(1, &v));
+            os.write_bytes(1, &v)?;
         };
         if let Some(v) = self.iterations {
-            try!(os.write_uint32(2, v));
+            os.write_uint32(2, v)?;
         };
         if let Some(v) = self.size {
-            try!(os.write_uint64(3, v));
+            os.write_uint64(3, v)?;
         };
         if let Some(v) = self.sha256.as_ref() {
-            try!(os.write_bytes(4, &v));
+            os.write_bytes(4, &v)?;
         };
         if let Some(v) = self.time {
-            try!(os.write_int64(5, v));
+            os.write_int64(5, v)?;
         };
-        try!(os.write_unknown_fields(self.get_unknown_fields()));
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
@@ -3295,10 +3365,6 @@ impl ::protobuf::Message for BackupInfo {
 
     fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
         &mut self.unknown_fields
-    }
-
-    fn type_id(&self) -> ::std::any::TypeId {
-        ::std::any::TypeId::of::<BackupInfo>()
     }
 
     fn as_any(&self) -> &::std::any::Any {
@@ -3323,30 +3389,30 @@ impl ::protobuf::MessageStatic for BackupInfo {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "backup_data",
-                    BackupInfo::has_backup_data,
-                    BackupInfo::get_backup_data,
+                    BackupInfo::get_backup_data_for_reflect,
+                    BackupInfo::mut_backup_data_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_u32_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "iterations",
-                    BackupInfo::has_iterations,
-                    BackupInfo::get_iterations,
+                    BackupInfo::get_iterations_for_reflect,
+                    BackupInfo::mut_iterations_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_u64_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeUint64>(
                     "size",
-                    BackupInfo::has_size,
-                    BackupInfo::get_size,
+                    BackupInfo::get_size_for_reflect,
+                    BackupInfo::mut_size_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_bytes_accessor(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "sha256",
-                    BackupInfo::has_sha256,
-                    BackupInfo::get_sha256,
+                    BackupInfo::get_sha256_for_reflect,
+                    BackupInfo::mut_sha256_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_i64_accessor(
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeInt64>(
                     "time",
-                    BackupInfo::has_time,
-                    BackupInfo::get_time,
+                    BackupInfo::get_time_for_reflect,
+                    BackupInfo::mut_time_for_reflect,
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<BackupInfo>(
                     "BackupInfo",
@@ -3369,20 +3435,15 @@ impl ::protobuf::Clear for BackupInfo {
     }
 }
 
-impl ::std::cmp::PartialEq for BackupInfo {
-    fn eq(&self, other: &BackupInfo) -> bool {
-        self.backup_data == other.backup_data &&
-        self.iterations == other.iterations &&
-        self.size == other.size &&
-        self.sha256 == other.sha256 &&
-        self.time == other.time &&
-        self.unknown_fields == other.unknown_fields
-    }
-}
-
 impl ::std::fmt::Debug for BackupInfo {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for BackupInfo {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
 
