@@ -14,7 +14,7 @@ dependencies = [
  "minilzo 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "protobuf 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)",
+ "protobuf 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "1.0.24"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -274,7 +274,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum minilzo-sys 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ce123edaa554212f9aef7466ae6805c59ce71edd79ead0c2aa8e828e444de9e5"
 "checksum num_cpus 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a225d1e2717567599c24f88e49f00856c6e825a12125181ee42c4257e3688d39"
 "checksum output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fa48553a7b3daf627fb657b93589c7ec94ec2048dc8c1445eba00f6d21676772"
-"checksum protobuf 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)" = "6ec4c2fe04370298218a09ab53a534febf54c160c5554e4de987b6d73c916d5d"
+"checksum protobuf 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "229112a9213bf62a59f0702871a6e4872fe928161fc7a08f17cdd6c8c7988bf7"
 "checksum rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "022e0636ec2519ddae48154b028864bdce4eaf7d35226ab8e65c611be97b189d"
 "checksum rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)" = "f76d05d3993fd5f4af9434e8e436db163a12a9d40e1a58a726f27a01dfd12a2a"
 "checksum rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)" = "237546c689f20bb44980270c73c3b9edd0891c1be49cc1274406134a66d3957b"
