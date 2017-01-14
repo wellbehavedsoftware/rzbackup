@@ -77,6 +77,11 @@ struct RepositoryData {
 	encryption_key: Option <EncryptionKey>,
 }
 
+pub struct RepositoryJobStatus {
+	pub bundles_loading: Vec <BundleId>,
+	pub bundles_to_load: Vec <BundleId>,
+}
+
 type ChunkWaiter = Complete <Result <ChunkData, String>>;
 type BundleWaiters = HashMap <ChunkId, Vec <ChunkWaiter>>;
 
@@ -230,17 +235,13 @@ impl Repository {
 		// create storage manager
 
 		let storage_manager =
-			try! (
-
 			StorageManager::new (
 				repository_config.filesystem_cache_path.clone (),
 				cpu_pool.clone (),
 				repository_config.max_uncompressed_memory_cache_entries,
 				repository_config.max_compressed_memory_cache_entries,
 				repository_config.max_compressed_filesystem_cache_entries,
-			)
-
-		);
+			) ?;
 
 		// create data
 
@@ -1721,4 +1722,28 @@ impl Repository {
 
 	}
 
+	pub fn job_status (
+		& self,
+	) -> RepositoryJobStatus {
+
+		let self_state =
+			self.state.lock ().unwrap ();
+
+		RepositoryJobStatus {
+
+			bundles_loading:
+				self_state.bundles_loading.keys ()
+					.map (|& bundle_id| bundle_id)
+					.collect (),
+
+			bundles_to_load:
+				self_state.bundles_to_load.keys ()
+					.map (|& bundle_id| bundle_id)
+					.collect (),
+		}
+
+	}
+
 }
+
+// ex: noet ts=4 filetype=rust

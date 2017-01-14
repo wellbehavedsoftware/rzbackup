@@ -7,8 +7,9 @@ use std::net::TcpStream;
 use output;
 use output::Output;
 
-use ::Repository;
+use rustc_serialize::hex::ToHex;
 
+use ::Repository;
 use ::misc::*;
 
 pub fn handle_client (
@@ -121,6 +122,16 @@ fn handle_client_real (
 
 			return Ok (());
 
+		} else if command == "status" {
+
+			try! (
+				handle_status (
+					& output,
+					repository,
+					& stream));
+
+			return Ok (());
+
 		} else {
 
 			try! (
@@ -188,17 +199,88 @@ fn handle_restore (
 		BufWriter::new (
 			stream);
 
-	try! (
-		io_result (
-			writer.write_fmt (
-				format_args! (
-					"OK\n"))));
+	io_result (
+		writer.write_fmt (
+			format_args! (
+				"OK\n")),
+	) ?;
 
-	try! (
-		repository.restore (
-			output,
-			path,
-			& mut writer));
+	repository.restore (
+		output,
+		path,
+		& mut writer,
+	) ?;
+
+	Ok (())
+
+}
+
+fn handle_status (
+	output: & Output,
+	repository: & Repository,
+	stream: & TcpStream,
+) -> Result <(), String> {
+
+	output.message_format (
+		format_args! (
+			"Will return status"));
+
+	let mut writer =
+		BufWriter::new (
+			stream);
+
+	let job_status =
+		repository.job_status ();
+
+	io_result (
+		write! (
+			writer,
+			"OK\n"),
+	) ?;
+
+	io_result (
+		write! (
+			writer,
+			"{{ \"bundles-loading\": ["),
+	) ?;
+
+	for (index, bundle_id)
+	in job_status.bundles_loading.iter ().enumerate () {
+
+		io_result (
+			write! (
+				writer,
+				"{}\"{}\"",
+				if index == 0 { " " } else { ", " },
+				bundle_id.to_hex ()),
+		) ?;
+
+	}
+
+	io_result (
+		write! (
+			writer,
+			" ], \"bundles-to-load\": ["),
+	) ?;
+
+	for (index, bundle_id)
+	in job_status.bundles_to_load.iter ().enumerate () {
+
+		io_result (
+			write! (
+				writer,
+				"{}\"{}\"",
+				if index == 0 { " " } else { ", " },
+				bundle_id.to_hex ()),
+		) ?;
+
+	}
+
+	io_result (
+		write! (
+			writer,
+			" ] }}\n"),
+	) ?;
 
 	Ok (())
 
@@ -229,3 +311,4 @@ fn handle_command_not_recognised (
 }
 
 // ex: noet ts=4 filetype=rust
+
