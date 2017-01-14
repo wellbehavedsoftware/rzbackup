@@ -1125,22 +1125,29 @@ impl Repository {
 
 		// lookup via storage manager
 
-		match (
-
+		if let Some (chunk_data_future) =
 			self.storage_manager.get (
 				& chunk_id.to_hex (),
-			)
+			) {
 
-		) {
+			let self_clone =
+				self.clone ();
 
-			Some (chunk_data_future) =>
-				return futures::done (
-					Ok (chunk_data_future),
-				).boxed (),
+			return futures::done (
+				Ok (chunk_data_future),
+			).or_else (
+				move |_error: String| {
 
-			None => (),
+				let mut self_state =
+					self_clone.state.lock ().unwrap ();
 
-		};
+				self_clone.load_chunk_async_async (
+					self_state.deref_mut (),
+					chunk_id)
+
+			}).boxed ();
+
+		}
 
 		// load bundle if chunk is not available
 
