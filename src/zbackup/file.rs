@@ -27,6 +27,8 @@ impl TempFileManager {
 		repository_path: & Path,
 	) -> Result <TempFileManager, String> {
 
+		// lock with flock
+
 		let lock_path =
 			repository_path.join ("lock");
 
@@ -38,45 +40,80 @@ impl TempFileManager {
 				.map (|&c| c)
 				.collect ();
 
-		let lock_fd: libc::c_int;
+		let lock_fd = unsafe {
+			libc::open (
+				& lock_path_c_str [0]
+					as * const u8
+					as * const i8,
+				libc::O_CREAT | libc::O_WRONLY | libc::O_TRUNC,
+				0o0600,
+			)
+		};
 
-		unsafe {
+		if lock_fd < 0 {
 
-			lock_fd =
-				libc::open (
-					& lock_path_c_str [0]
-						as * const u8
-						as * const i8,
-					libc::O_CREAT | libc::O_WRONLY | libc::O_TRUNC,
-					0o0600);
-
-			if lock_fd < 0 {
-
-				return Err (
-					format! (
-						"Error creating lock file {}: {}",
-						lock_path.to_string_lossy (),
-						errno::errno ()));
-
-			}
-
-			let flock_result =
-				libc::flock (
-					lock_fd,
-					libc::LOCK_EX);
-
-			if flock_result != 0 {
-
-				libc::close (lock_fd);
-
-				return Err (
-					format! (
-						"Error obtaining lock on file: {}",
-						lock_path.to_string_lossy ()));
-
-			}
+			return Err (
+				format! (
+					"Error creating lock file {}: {}",
+					lock_path.to_string_lossy (),
+					errno::errno ()));
 
 		}
+
+		let flock_result = unsafe {
+			libc::flock (
+				lock_fd,
+				libc::LOCK_EX,
+			)
+		};
+
+		if flock_result != 0 {
+
+			unsafe {
+				libc::close (lock_fd);
+			}
+
+			return Err (
+				format! (
+					"Error obtaining lock on file: {}",
+					lock_path.to_string_lossy ()));
+
+		}
+
+		// lock with fcntl
+
+		let mut fcntl_flock =
+			libc::flock {
+				l_type: F_WRLCK,
+				l_whence: libc::SEEK_SET as i16,
+				l_start: 0,
+				l_len: 0,
+				l_pid: 0,
+			};
+
+		let fcntl_result = unsafe {
+			libc::fcntl (
+				lock_fd,
+				libc::F_SETLKW,
+				& mut fcntl_flock
+					as * mut libc::flock,
+			)
+		};
+
+		if fcntl_result != 0 {
+
+			unsafe {
+				libc::close (lock_fd);
+			}
+
+			return Err (
+				format! (
+					"Error obtaining lock on file: {}",
+					lock_path.to_string_lossy ()));
+
+		}
+
+		// create tmp directory
 
 		let temp_dir_path =
 			repository_path.join ("tmp");
@@ -339,5 +376,7 @@ fn rename_or_copy_and_delete <
 	Ok (())
 
 }
+
+const F_WRLCK: libc::c_short = 1;
 
 // ex: noet ts=4 filetype=rust
