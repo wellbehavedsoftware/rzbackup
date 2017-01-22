@@ -64,8 +64,7 @@ impl StorageManager {
 
 		// get string from path
 
-		let path =
-			try! (
+		let path = (
 
 			path_ref.as_ref ().to_str (
 			).ok_or_else (
@@ -77,31 +76,25 @@ impl StorageManager {
 
 			)
 
-		).to_owned ();
+		) ?.to_owned ();
 
 		// try and create filesystem cache path
 
-		try! (
+		fs::create_dir_all (
+			& path,
+		).map_err (
+			|error|
 
-			fs::create_dir_all (
+			format! (
+				"Error creating filesystem cache path: {}: {}",
 				& path,
-			).map_err (
-				|error|
+				error.description ())
 
-				format! (
-					"Error creating filesystem cache path: {}: {}",
-					& path,
-					error.description ())
-
-			)
-
-		);
+		) ?;
 
 		// check we can access filesystem cache path
 
 		let metadata =
-			try! (
-
 			fs::metadata (
 				& path,
 			).map_err (
@@ -111,9 +104,7 @@ impl StorageManager {
 					"Unable to access {}",
 					& path)
 
-			)
-
-		);
+			) ?;
 
 		if ! metadata.is_dir () {
 
@@ -376,8 +367,6 @@ impl StorageManager {
 					move || {
 
 					let uncompressed_data =
-						try! (
-
 						minilzo::decompress (
 							& compressed_data,
 							uncompressed_size,
@@ -394,9 +383,7 @@ impl StorageManager {
 								"Decompression failed: {:?}",
 								error)
 
-						)
-
-					);
+						) ?;
 
 					let mut self_state =
 						self_clone.state.lock ().unwrap ();
@@ -463,8 +450,7 @@ impl StorageManager {
 					move || {
 
 					let (uncompressed_data, compressed_data) =
-						try! (
-							filesystem_item.get ());
+						filesystem_item.get () ?;
 
 					let mut self_state =
 						self_clone.state.lock ().unwrap ();
@@ -523,8 +509,6 @@ impl FilesystemItem {
 	) -> Result <(Arc <Vec <u8>>, Option <Arc <Vec <u8>>>), String> {
 
 		let mut file =
-			try! (
-
 			File::open (
 				self.path (),
 			).map_err (
@@ -535,35 +519,28 @@ impl FilesystemItem {
 					self.key,
 					error.description ())
 
-			)
-
-		);
+			) ?;
 
 		let mut stored_data =
 			Vec::with_capacity (
 				self.stored_size);
 
-		try! (
+		file.read_to_end (
+			& mut stored_data,
+		).map_err (
+			|error|
 
-			file.read_to_end (
-				& mut stored_data,
-			).map_err (
-				|error|
+			format! (
+				"Error loading storage item {}: {}",
+				self.key,
+				error.description ())
 
-				format! (
-					"Error loading storage item {}: {}",
-					self.key,
-					error.description ())
-
-			)
-
-		);
+		) ?;
 
 		if self.compressed {
 
 			let uncompressed_data =
 				Arc::new (
-					try! (
 
 				minilzo::decompress (
 					& stored_data,
@@ -575,9 +552,9 @@ impl FilesystemItem {
 						"Error decompressing stored data: {:?}",
 						error)
 
-				)
+				) ?
 
-			));
+			);
 
 			Ok (
 

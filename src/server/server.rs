@@ -79,10 +79,10 @@ pub fn run_server_listener (
 ) -> Result <(), String> {
 
 	let listener =
-		try! (
-			io_result (
-				TcpListener::bind (
-					bind_address)));
+		io_result (
+			TcpListener::bind (
+				bind_address),
+		) ?;
 
 	for stream
 	in listener.incoming () {

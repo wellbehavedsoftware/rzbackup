@@ -77,26 +77,27 @@ impl <'a> RandomAccess <'a> {
 
 		let mut offset: u64 = 0;
 
-		while ! try! (
+		while ! (
 			protobuf_result (
-				coded_input_stream.eof ())) {
+				coded_input_stream.eof ())
+		) ? {
 
 			let instruction_length =
-				try! (
-					protobuf_result (
-						coded_input_stream.read_raw_varint32 ()));
+				protobuf_result (
+					coded_input_stream.read_raw_varint32 (),
+				) ?;
 
 			let instruction_old_limit =
-				try! (
-					protobuf_result (
-						coded_input_stream.push_limit (
-							instruction_length)));
+				protobuf_result (
+					coded_input_stream.push_limit (
+						instruction_length),
+				) ?;
 
 			let backup_instruction =
-				try! (
-					protobuf_result (
-						protobuf::core::parse_from::<proto::BackupInstruction> (
-							& mut coded_input_stream)));
+				protobuf_result (
+					protobuf::core::parse_from::<proto::BackupInstruction> (
+						& mut coded_input_stream),
+				) ?;
 
 			coded_input_stream.pop_limit (
 				instruction_old_limit);
@@ -108,9 +109,9 @@ impl <'a> RandomAccess <'a> {
 						backup_instruction.get_chunk_to_emit ());
 
 				let index_entry =
-					try! (
-						repo.get_index_entry (
-							chunk_id));
+					repo.get_index_entry (
+						chunk_id,
+					) ?;
 
 				instruction_refs.push (
 					InstructionRef {
@@ -212,9 +213,9 @@ impl <'a> Read for RandomAccess <'a> {
 						function_bytes_read as usize
 							+ loop_bytes_read as usize];
 
-				try! (
-					target.write_all (
-						source));
+				target.write_all (
+					source,
+				) ?;
 
 			}
 
@@ -268,19 +269,18 @@ impl <'a> Read for RandomAccess <'a> {
 				InstructionRefContent::Chunk (ref chunk_id) => {
 
 					self.chunk_bytes =
-						try! (
-							self.repo.get_chunk (
-								* chunk_id,
-							).map_err (
-								|_error|
+						self.repo.get_chunk (
+							* chunk_id,
+						).map_err (
+							|_error|
 
-								io::Error::new (
-									io::ErrorKind::InvalidData,
-									format! (
-										"Chunk not found: {}",
-										chunk_id.to_hex ()))
+							io::Error::new (
+								io::ErrorKind::InvalidData,
+								format! (
+									"Chunk not found: {}",
+									chunk_id.to_hex ()))
 
-							));
+						) ?;
 
 					self.chunk_position =
 						0;
@@ -357,17 +357,16 @@ impl <'a> Seek for RandomAccess <'a> {
 					InstructionRefContent::Chunk (ref chunk_id) => {
 
 						self.chunk_bytes =
-							try! (
-								self.repo.get_chunk (
-									* chunk_id,
-								).map_err (
-									|_error|
-									io::Error::new (
-										io::ErrorKind::InvalidData,
-										format! (
-											"Chunk not found: {}",
-											chunk_id.to_hex ()))
-								));
+							self.repo.get_chunk (
+								* chunk_id,
+							).map_err (
+								|_error|
+								io::Error::new (
+									io::ErrorKind::InvalidData,
+									format! (
+										"Chunk not found: {}",
+										chunk_id.to_hex ()))
+							) ?;
 
 						self.chunk_position =
 							self.position - instruction_ref.start;

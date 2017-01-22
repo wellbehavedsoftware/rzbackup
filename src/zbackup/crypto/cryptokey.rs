@@ -28,18 +28,18 @@ pub fn decrypt_key <
 	// read password from file
 
 	let mut password_file =
-		try! (
-			io_result (
-				File::open (
-					password_file_path)));
+		io_result (
+			File::open (
+				password_file_path),
+		) ?;
 
 	let mut password_string =
 		String::new ();
 
-	try! (
-		io_result (
-			password_file.read_to_string (
-				& mut password_string)));
+	io_result (
+		password_file.read_to_string (
+			& mut password_string),
+	) ?;
 
 	// remove trailing newline
 

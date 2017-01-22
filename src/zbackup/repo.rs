@@ -190,10 +190,12 @@ impl Repository {
 
 			}
 
-			match try! (
+			match (
 				decrypt_key (
 					password_file_path.unwrap (),
-					storage_info.get_encryption_key ())) {
+					storage_info.get_encryption_key (),
+				) ?
+			) {
 
 				Some (key) =>
 					Some (key),
@@ -428,9 +430,9 @@ impl Repository {
 		) ? {
 
 			let dir_entry =
-				try! (
-					io_result (
-						dir_entry_or_error));
+				io_result (
+					dir_entry_or_error,
+				) ?;
 
 			let file_name =
 				dir_entry.file_name ();
@@ -590,9 +592,9 @@ impl Repository {
 		backup_name: & str,
 	) -> Result <(Vec <u8>, [u8; 32]), String> {
 
-		try! (
-			self.load_indexes (
-				output));
+		self.load_indexes (
+			output,
+		) ?;
 
 		// load backup
 
@@ -759,11 +761,11 @@ impl Repository {
 				backup_name));
 
 		let mut input =
-			try! (
-				RandomAccess::new (
-					output,
-					self,
-					backup_name));
+			RandomAccess::new (
+				output,
+				self,
+				backup_name,
+			) ?;
 
 		let mut buffer: Vec <u8> =
 			vec! [0u8; BUFFER_SIZE];
@@ -773,20 +775,20 @@ impl Repository {
 		loop {
 
 			let bytes_read =
-				try! (
-					io_result (
-						input.read (
-							& mut buffer)));
+				io_result (
+					input.read (
+						& mut buffer),
+				) ?;
 
 			if bytes_read == 0 {
 				break;
 			}
 
-			try! (
-				io_result (
-					target.write (
-						& buffer [
-							0 .. bytes_read ])));
+			io_result (
+				target.write (
+					& buffer [
+						0 .. bytes_read ]),
+			) ?;
 
 		}
 
@@ -901,9 +903,9 @@ impl Repository {
 			if future_chunk_job.is_none () && ! eof {
 
 				if (
-					try! (
-						protobuf_result (
-							coded_input_stream.eof ()))
+					protobuf_result (
+						coded_input_stream.eof (),
+					) ?
 				) {
 
 					eof = true;
@@ -1420,10 +1422,10 @@ impl Repository {
 			for (chunk_id, chunk_data)
 			in chunk_map.iter () {
 
-				try! (
-					self_clone.storage_manager.insert (
-						chunk_id.to_hex (),
-						chunk_data.clone ()));
+				self_clone.storage_manager.insert (
+					chunk_id.to_hex (),
+					chunk_data.clone (),
+				) ?;
 
 			}
 

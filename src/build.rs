@@ -26,19 +26,15 @@ fn main () {
 fn main_real (
 ) -> Result <(), String> {
 
-	try! (
+	write_metadata (
+	).map_err (
+		|io_error|
 
-		write_metadata (
-		).map_err (
-			|io_error|
+		format! (
+			"Error writing metadata: {}",
+			io_error.description ())
 
-			format! (
-				"Error writing metadata: {}",
-				io_error.description ())
-
-		)
-
-	);
+	) ?;
 
 	Ok (())
 

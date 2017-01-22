@@ -59,10 +59,10 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 		// read file header
 
 		let file_header: proto::FileHeader =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| "file header".to_string ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "file header".to_string (),
+			) ?;
 
 		if file_header.get_version () != 1 {
 
@@ -75,10 +75,10 @@ pub fn read_storage_info <PathRef: AsRef <Path>> (
 		// read storage info
 
 		storage_info =
-			try! (
-				read_message (
-					& mut coded_input_stream,
-					|| "storage info".to_string ()));
+			read_message (
+				& mut coded_input_stream,
+				|| "storage info".to_string (),
+			) ?;
 
 	}
 
@@ -348,12 +348,12 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 
 	// verify checksum
 
-	try! (
-		verify_adler (
-			|| format! (
-				"Error reading {}: ",
-				bundle_path.to_string_lossy ()),
-			& mut source));
+	verify_adler (
+		|| format! (
+			"Error reading {}: ",
+			bundle_path.to_string_lossy ()),
+		& mut source,
+	) ?;
 
 	Ok (bundle_info)
 
@@ -451,9 +451,9 @@ pub fn read_bundle <PathRef: AsRef <Path>> (
 		chunks = Vec::new ();
 
 		let mut lzma_reader =
-			try! (
-				lzma::LzmaReader::new (
-					& mut source));
+			lzma::LzmaReader::new (
+				& mut source,
+			) ?;
 
 		// split into chunks
 
@@ -562,30 +562,30 @@ pub fn read_message <
 ) -> Result <Type, String> {
 
 	let message_length =
-		try! (
-			protobuf_result_with_prefix (
-				|| format! (
-					"Error reading {} length: ",
-					name_function ()),
-				coded_input_stream.read_raw_varint32 ()));
+		protobuf_result_with_prefix (
+			|| format! (
+				"Error reading {} length: ",
+				name_function ()),
+			coded_input_stream.read_raw_varint32 (),
+		) ?;
 
 	let old_limit =
-		try! (
-			protobuf_result_with_prefix (
-				|| format! (
-					"Error preparing to read {}: ",
-					name_function ()),
-				coded_input_stream.push_limit (
-					message_length)));
+		protobuf_result_with_prefix (
+			|| format! (
+				"Error preparing to read {}: ",
+				name_function ()),
+			coded_input_stream.push_limit (
+				message_length),
+		) ?;
 
 	let message =
-		try! (
-			protobuf_result_with_prefix (
-				|| format! (
-					"Error reading {}: ",
-					name_function ()),
-				protobuf::core::parse_from::<Type> (
-					coded_input_stream)));
+		protobuf_result_with_prefix (
+			|| format! (
+				"Error reading {}: ",
+				name_function ()),
+			protobuf::core::parse_from::<Type> (
+				coded_input_stream),
+		) ?;
 
 	coded_input_stream.pop_limit (
 		old_limit);
@@ -606,17 +606,17 @@ fn open_file_with_crypto_and_adler <
 		Some (key) => {
 
 			let mut crypto_reader =
-				try! (
-					CryptoReader::open (
-						path,
-						key));
+				CryptoReader::open (
+					path,
+					key,
+				) ?;
 
 			let mut initialisation_vector =
 				[0u8; IV_SIZE];
 
-			try! (
-				crypto_reader.read_exact (
-					& mut initialisation_vector));
+			crypto_reader.read_exact (
+				& mut initialisation_vector,
+			) ?;
 
 			let mut adler_read =
 				AdlerRead::new (
@@ -636,9 +636,9 @@ fn open_file_with_crypto_and_adler <
 				Box::new (
 					BufReader::new (
 
-			try! (
-				File::open (
-					path))
+			File::open (
+				path,
+			) ?
 
 		))),
 
@@ -658,15 +658,13 @@ fn verify_adler <
 	let calculated_hash =
 		adler_read.hash ();
 
-	let expected_hash = try! (
-
+	let expected_hash =
 		io_result_with_prefix (
 			|| format! (
 				"{}Error reading adler32 checksum: ",
 				prefix_function ()),
-			adler_read.read_u32::<LittleEndian> ())
-
-	);
+			adler_read.read_u32::<LittleEndian> (),
+		) ?;
 
 	if calculated_hash != expected_hash {
 

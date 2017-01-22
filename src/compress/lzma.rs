@@ -200,8 +200,7 @@ impl <'a> Read for LzmaReader <'a> {
 			{
 
 				let input_buffer =
-					try! (
-						self.input.fill_buf ());
+					self.input.fill_buf () ?;
 
 				if input_buffer.len () == 0 {
 

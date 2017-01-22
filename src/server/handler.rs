@@ -63,10 +63,10 @@ fn handle_client_real (
 		let mut line =
 			String::new ();
 
-		try! (
-			io_result (
-				reader.read_line (
-					& mut line)));
+		io_result (
+			reader.read_line (
+				& mut line),
+		) ?;
 
 		if line.is_empty () {
 
@@ -105,39 +105,39 @@ fn handle_client_real (
 
 		} else if command == "reindex" {
 
-			try! (
-				handle_reindex (
-					& output,
-					repository,
-					& stream));
+			handle_reindex (
+				& output,
+				repository,
+				& stream,
+			) ?;
 
 		} else if command == "restore" {
 
-			try! (
-				handle_restore (
-					& output,
-					repository,
-					& stream,
-					rest));
+			handle_restore (
+				& output,
+				repository,
+				& stream,
+				rest,
+			) ?;
 
 			return Ok (());
 
 		} else if command == "status" {
 
-			try! (
-				handle_status (
-					& output,
-					repository,
-					& stream));
+			handle_status (
+				& output,
+				repository,
+				& stream,
+			) ?;
 
 			return Ok (());
 
 		} else {
 
-			try! (
-				handle_command_not_recognised (
-					& stream,
-					command));
+			handle_command_not_recognised (
+				& stream,
+				command,
+			) ?;
 
 		}
 
@@ -158,26 +158,22 @@ fn handle_reindex (
 		BufWriter::new (
 			stream);
 
-	try! (
+	repository.reload_indexes (
+		output,
+	).map_err (
+		|error|
 
-		repository.reload_indexes (
-			output,
-		).map_err (
-			|error|
+		format! (
+			"Error during reindex: {}",
+			error)
 
-			format! (
-				"Error during reindex: {}",
-				error)
+	) ?;
 
-		)
-
-	);
-
-	try! (
-		io_result (
-			writer.write_fmt (
-				format_args! (
-					"OK\n"))));
+	io_result (
+		writer.write_fmt (
+			format_args! (
+				"OK\n")),
+	) ?;
 
 	Ok (())
 
@@ -299,12 +295,12 @@ fn handle_command_not_recognised (
 		BufWriter::new (
 			stream);
 
-	try! (
-		io_result (
-			writer.write_fmt (
-				format_args! (
-					"ERROR Command not recognised: {}\n",
-					command_name))));
+	io_result (
+		writer.write_fmt (
+			format_args! (
+				"ERROR Command not recognised: {}\n",
+				command_name)),
+	) ?;
 
 	Ok (())
 

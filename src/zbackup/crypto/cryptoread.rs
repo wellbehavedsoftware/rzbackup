@@ -113,9 +113,9 @@ impl CryptoReader {
 				self.ciphertext_start = 0;
 
 				self.ciphertext_end =
-					try! (
-						self.input.read (
-							& mut self.ciphertext_buffer));
+					self.input.read (
+						& mut self.ciphertext_buffer,
+					) ?;
 
 				if self.ciphertext_end == 0 {
 					self.ciphertext_eof = true;
@@ -139,13 +139,10 @@ impl CryptoReader {
 						self.plaintext_end .. ]);
 
 			let decrypt_result =
-				try! (
-
 				self.decryptor.decrypt (
 					& mut read_buffer,
 					& mut write_buffer,
 					self.ciphertext_eof,
-
 				).map_err (
 					|_|
 
@@ -153,9 +150,7 @@ impl CryptoReader {
 						io::ErrorKind::InvalidData,
 						"Decryption failed")
 
-				)
-
-			);
+				) ?;
 
 			self.ciphertext_start +=
 				read_buffer.position ();
@@ -212,10 +207,7 @@ impl Read for CryptoReader {
 			// read more data if appropriate
 
 			if self.plaintext_start == self.plaintext_end {
-
-				try! (
-					self.read_and_decrypt ());
-
+				self.read_and_decrypt () ?;
 			}
 
 			// check available data

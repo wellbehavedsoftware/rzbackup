@@ -92,13 +92,10 @@ impl <Target: Write> CryptoWriter <Target> {
 						& mut self.ciphertext_buffer);
 
 				encrypt_result =
-					try! (
-
 					self.encryptor.encrypt (
 						& mut read_buffer,
 						& mut write_buffer,
 						self.plaintext_eof,
-
 					).map_err (
 						|_|
 
@@ -106,9 +103,7 @@ impl <Target: Write> CryptoWriter <Target> {
 							io::ErrorKind::InvalidData,
 							"Encryption failed")
 
-					)
-
-				);
+					) ?;
 
 				bytes_out =
 					write_buffer.position ();
