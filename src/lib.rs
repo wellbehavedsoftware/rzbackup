@@ -32,6 +32,7 @@ extern crate num_cpus;
 extern crate output;
 extern crate protobuf;
 extern crate rand;
+extern crate regex;
 extern crate rustc_serialize;
 
 #[ doc (hidden) ]

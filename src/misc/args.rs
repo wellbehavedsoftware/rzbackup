@@ -1,6 +1,9 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use clap;
+
+use regex::Regex;
 
 pub fn bool_flag (
 	matches: & clap::ArgMatches,
@@ -85,6 +88,77 @@ pub fn path_optional (
 			os_string)
 
 	)
+
+}
+
+pub fn duration_required (
+	matches: & clap::ArgMatches,
+	name: & str,
+) -> Duration {
+
+	lazy_static! {
+
+		static ref DURATION_REGEX: Regex =
+			Regex::new (
+				r"^(0|[1-9][0-9]*)\s*(ms|millisecond|milliseconds|s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$",
+			).unwrap ();
+
+    }
+
+	let string_value =
+		string_required (
+			matches,
+			name,
+		);
+
+	if let Some (captures) =
+		DURATION_REGEX.captures (
+			& string_value,
+		) {
+
+		let quantity: u64 =
+			captures.get (1).unwrap ().as_str ().parse ().unwrap ();
+
+		let units_str =
+			captures.get (2).unwrap ().as_str ();
+
+		match units_str {
+
+			"ms" | "millisecond" | "milliseconds" =>
+				Duration::from_millis (
+					quantity),
+
+			"s" | "sec" | "secs" | "second" | "seconds" =>
+				Duration::from_secs (
+					quantity),
+
+			"m" | "min" | "mins" | "minute" | "minutes" =>
+				Duration::from_secs (
+					quantity * 60),
+
+			"h" | "hr" | "hrs" | "hour" | "hours" =>
+				Duration::from_secs (
+					quantity * 60 * 60),
+
+			"d" | "day" | "days" =>
+				Duration::from_secs (
+					quantity * 60 * 60 * 24),
+
+			_ =>
+				panic! (
+					"Internal error parsing duration: {}",
+					string_value),
+
+		}
+
+	} else {
+
+		error_exit (
+			format! (
+				"Invalid value for --{}",
+				name))
+
+	}
 
 }
 

@@ -1,5 +1,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
 
 use clap;
 
@@ -33,6 +36,8 @@ pub struct BalanceBundlesArguments {
 	password_file_path: Option <PathBuf>,
 	chunks_per_bundle: u64,
 	fill_factor: u64,
+	checkpoint_time: Duration,
+	sleep_time: Duration,
 }
 
 pub struct BalanceBundlesCommand {
@@ -60,53 +65,64 @@ pub fn balance_bundles (
 				arguments.password_file_path.clone ()),
 		) ?;
 
-	// begin transaction
+	loop {
 
-	let mut temp_files =
-		TempFileManager::new (
-			& arguments.repository_path,
+		// begin transaction
+
+		let mut temp_files =
+			TempFileManager::new (
+				& arguments.repository_path,
+			) ?;
+
+		// get list of index files
+
+		let old_index_ids_and_sizes = (
+			scan_index_files_with_sizes (
+				& arguments.repository_path)
 		) ?;
 
-	// get list of index files
+		output.message_format (
+			format_args! (
+				"Found {} index files",
+				old_index_ids_and_sizes.len ()));
 
-	let old_index_ids_and_sizes = (
-		scan_index_files_with_sizes (
-			& arguments.repository_path)
-	) ?;
+		// read indexes and discard any which are balanced
 
-	output.message_format (
-		format_args! (
-			"Found {} index files",
-			old_index_ids_and_sizes.len ()));
+		let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
+			Vec::new ();
 
-	// read indexes and discard any which are balanced
+		let mut new_bundles_total: u64 = 0;
 
-	let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
-		Vec::new ();
+		read_indexes_find_unbalanced (
+			output,
+			& repository,
+			& arguments,
+			minimum_chunk_count,
+			& old_index_ids_and_sizes,
+			& mut unbalanced_indexes,
+			& mut new_bundles_total,
+		) ?;
 
-	let mut new_bundles_total: u64 = 0;
+		// balance bundles
 
-	read_indexes_find_unbalanced (
-		output,
-		& repository,
-		& arguments,
-		minimum_chunk_count,
-		& old_index_ids_and_sizes,
-		& mut unbalanced_indexes,
-		& mut new_bundles_total,
-	) ?;
+		if balance_bundles_real (
+			output,
+			& repository,
+			& mut temp_files,
+			& arguments,
+			minimum_chunk_count,
+			& unbalanced_indexes,
+			new_bundles_total,
+		) ? {
+			break;
+		}
 
-	// balance bundles
+		// sleep a while
 
-	balance_bundles_real (
-		output,
-		& repository,
-		& mut temp_files,
-		& arguments,
-		minimum_chunk_count,
-		& unbalanced_indexes,
-		new_bundles_total,
-	) ?;
+		thread::sleep (
+			arguments.sleep_time);
+
+	}
 
 	Ok (())
 
@@ -237,10 +253,16 @@ fn balance_bundles_real (
 	minimum_chunk_count: u64,
 	unbalanced_indexes: & Vec <(IndexId, Vec <IndexEntry>)>,
 	new_bundles_total: u64,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	output.status (
 		"Reading bundles");
+
+	let start_time =
+		Instant::now ();
+
+	let checkpoint_time =
+		start_time + arguments.checkpoint_time;
 
 	let mut new_bundles_count: u64 = 0;
 
@@ -339,6 +361,29 @@ fn balance_bundles_real (
 			repository.index_path (
 				* unbalanced_index_id));
 
+		// handle checkpoints
+
+		if checkpoint_time < Instant::now () {
+
+			output.clear_status ();
+
+			output.message (
+				"Performing checkpoint");
+
+			flush_bundle (
+				output,
+				& repository,
+				temp_files,
+				& mut balanced_chunks,
+				& mut new_index_entries,
+				new_bundles_count,
+				new_bundles_total,
+			) ?;
+
+			return Ok (false);
+
+		}
+
 	}
 
 	output.clear_status ();
@@ -355,7 +400,7 @@ fn balance_bundles_real (
 		new_bundles_total,
 	) ?;
 
-	Ok (())
+	Ok (true)
 
 }
 
@@ -558,6 +603,26 @@ impl Command for BalanceBundlesCommand {
 
 			)
 
+			.arg (
+				clap::Arg::with_name ("checkpoint-time")
+
+				.long ("checkpoint-time")
+				.value_name ("CHECKPOINT-TIME")
+				.default_value ("5 minutes")
+				.help ("Time between checkpoints")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("sleep-time")
+
+				.long ("sleep-time")
+				.value_name ("SLEEP-TIME")
+				.default_value ("10 seconds")
+				.help ("Sleep time on every checkpoint")
+
+			)
+
 	}
 
 	fn clap_arguments_parse (
@@ -586,6 +651,16 @@ impl Command for BalanceBundlesCommand {
 				args::u64_required (
 					& clap_matches,
 					"fill-factor"),
+
+			checkpoint_time:
+				args::duration_required (
+					& clap_matches,
+					"checkpoint-time"),
+
+			sleep_time:
+				args::duration_required (
+					& clap_matches,
+					"sleep-time"),
 
 		};
 
