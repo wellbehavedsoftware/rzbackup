@@ -16,25 +16,6 @@ use ::zbackup::proto;
 use ::zbackup::read::*;
 use ::zbackup::write::*;
 
-pub fn check_indexes_command (
-) -> Box <Command> {
-
-	Box::new (
-		CheckIndexesCommand {},
-	)
-
-}
-
-pub struct CheckIndexesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	repair: bool,
-	verbose: bool,
-}
-
-pub struct CheckIndexesCommand {
-}
-
 pub fn check_indexes (
 	output: & Output,
 	arguments: & CheckIndexesArguments,
@@ -316,31 +297,19 @@ pub fn check_indexes (
 
 }
 
-impl CommandArguments for CheckIndexesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = check_indexes,
+	export = check_indexes_command,
 
-		check_indexes (
-			output,
-			self,
-		)
+	arguments = CheckIndexesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		repair: bool,
+		verbose: bool,
+	},
 
-	}
-
-}
-
-impl Command for CheckIndexesCommand {
-
-	fn name (& self) -> & 'static str {
-		"check-indexes"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("check-indexes")
 			.about ("Checks index files for duplicate or missing chunks")
@@ -381,14 +350,11 @@ impl Command for CheckIndexesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = CheckIndexesArguments {
+		CheckIndexesArguments {
 
 			repository_path:
 				args::path_required (
@@ -410,12 +376,10 @@ impl Command for CheckIndexesCommand {
 					& clap_matches,
 					"verbose"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

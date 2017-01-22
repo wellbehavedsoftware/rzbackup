@@ -13,25 +13,6 @@ use ::misc::*;
 use ::zbackup::data::*;
 use ::zbackup::read::*;
 
-pub fn check_bundles_command (
-) -> Box <Command> {
-
-	Box::new (
-		CheckBundlesCommand {},
-	)
-
-}
-
-pub struct CheckBundlesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	bundle_name_prefix: Option <String>,
-	repair: bool,
-}
-
-pub struct CheckBundlesCommand {
-}
-
 pub fn check_bundles (
 	output: & Output,
 	arguments: & CheckBundlesArguments,
@@ -168,31 +149,19 @@ pub fn check_bundles (
 
 }
 
-impl CommandArguments for CheckBundlesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = check_bundles,
+	export = check_bundles_command,
 
-		check_bundles (
-			output,
-			self,
-		)
+	arguments = CheckBundlesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		bundle_name_prefix: Option <String>,
+		repair: bool,
+	},
 
-	}
-
-}
-
-impl Command for CheckBundlesCommand {
-
-	fn name (& self) -> & 'static str {
-		"check-bundles"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("check-bundles")
 			.about ("Checks bundle files for basic consistency")
@@ -227,14 +196,11 @@ impl Command for CheckBundlesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = CheckBundlesArguments {
+		CheckBundlesArguments {
 
 			repository_path:
 				args::path_required (
@@ -253,12 +219,10 @@ impl Command for CheckBundlesCommand {
 
 			repair: false,
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

@@ -19,23 +19,6 @@ use ::write::*;
 use ::zbackup::data::*;
 use ::zbackup::proto;
 
-pub fn gc_indexes_command (
-) -> Box <Command> {
-
-	Box::new (
-		GcIndexesCommand {},
-	)
-
-}
-
-pub struct GcIndexesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-}
-
-pub struct GcIndexesCommand {
-}
-
 pub fn gc_indexes (
 	output: & Output,
 	arguments: & GcIndexesArguments,
@@ -315,31 +298,17 @@ pub fn gc_indexes (
 
 }
 
-impl CommandArguments for GcIndexesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = gc_indexes,
+	export = gc_indexes_command,
 
-		gc_indexes (
-			output,
-			self,
-		)
+	arguments = GcIndexesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+	},
 
-	}
-
-}
-
-impl Command for GcIndexesCommand {
-
-	fn name (& self) -> & 'static str {
-		"gc-indexes"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("gc-indexes")
 			.about ("Removes index entries which are not referenced by any \
@@ -365,14 +334,11 @@ impl Command for GcIndexesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = GcIndexesArguments {
+		GcIndexesArguments {
 
 			repository_path:
 				args::path_required (
@@ -384,12 +350,10 @@ impl Command for GcIndexesCommand {
 					& clap_matches,
 					"password-file"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

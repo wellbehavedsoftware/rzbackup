@@ -22,27 +22,6 @@ use ::write::*;
 use ::zbackup::data::*;
 use ::zbackup::proto;
 
-pub fn balance_bundles_command (
-) -> Box <Command> {
-
-	Box::new (
-		BalanceBundlesCommand {},
-	)
-
-}
-
-pub struct BalanceBundlesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	chunks_per_bundle: u64,
-	fill_factor: u64,
-	checkpoint_time: Duration,
-	sleep_time: Duration,
-}
-
-pub struct BalanceBundlesCommand {
-}
-
 pub fn balance_bundles (
 	output: & Output,
 	arguments: & BalanceBundlesArguments,
@@ -534,31 +513,21 @@ fn flush_bundle (
 
 }
 
-impl CommandArguments for BalanceBundlesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = balance_bundles,
+	export = balance_bundles_command,
 
-		balance_bundles (
-			output,
-			self,
-		)
+	arguments = BalanceBundlesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		chunks_per_bundle: u64,
+		fill_factor: u64,
+		checkpoint_time: Duration,
+		sleep_time: Duration,
+	},
 
-	}
-
-}
-
-impl Command for BalanceBundlesCommand {
-
-	fn name (& self) -> & 'static str {
-		"balance-bundles"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("balance-bundles")
 			.about ("rewrites bundles so they are a consistent size")
@@ -623,12 +592,9 @@ impl Command for BalanceBundlesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
 		let arguments = BalanceBundlesArguments {
 
@@ -672,10 +638,10 @@ impl Command for BalanceBundlesCommand {
 
 		}
 
-		Box::new (arguments)
+		arguments
 
-	}
+	},
 
-}
+);
 
 // ex: noet ts=4 filetype=rust

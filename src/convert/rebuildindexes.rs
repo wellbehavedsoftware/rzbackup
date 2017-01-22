@@ -12,24 +12,6 @@ use ::read::*;
 use ::zbackup::data::*;
 use ::zbackup::proto;
 
-pub fn rebuild_indexes_command (
-) -> Box <Command> {
-
-	Box::new (
-		RebuildIndexesCommand {},
-	)
-
-}
-
-pub struct RebuildIndexesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	bundles_per_index: u64,
-}
-
-pub struct RebuildIndexesCommand {
-}
-
 pub fn rebuild_indexes (
 	output: & Output,
 	arguments: & RebuildIndexesArguments,
@@ -168,31 +150,18 @@ pub fn rebuild_indexes (
 
 }
 
-impl CommandArguments for RebuildIndexesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = rebuild_indexes,
+	export = rebuild_indexes_command,
 
-		rebuild_indexes (
-			output,
-			self,
-		)
+	arguments = RebuildIndexesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		bundles_per_index: u64,
+	},
 
-	}
-
-}
-
-impl Command for RebuildIndexesCommand {
-
-	fn name (& self) -> & 'static str {
-		"rebuild-indexes"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("rebuild-indexes")
 			.about ("Builds a new set of index files by scanning all bundles")
@@ -227,14 +196,11 @@ impl Command for RebuildIndexesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = RebuildIndexesArguments {
+		RebuildIndexesArguments {
 
 			repository_path:
 				args::path_required (
@@ -251,12 +217,10 @@ impl Command for RebuildIndexesCommand {
 					& clap_matches,
 					"bundles-per-index"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

@@ -12,24 +12,6 @@ use ::convert::utils::*;
 use ::misc::*;
 use ::read::*;
 
-pub fn balance_indexes_command (
-) -> Box <Command> {
-
-	Box::new (
-		BalanceIndexesCommand {},
-	)
-
-}
-
-pub struct BalanceIndexesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	bundles_per_index: u64,
-}
-
-pub struct BalanceIndexesCommand {
-}
-
 pub fn balance_indexes (
 	output: & Output,
 	arguments: & BalanceIndexesArguments,
@@ -152,31 +134,18 @@ pub fn balance_indexes (
 
 }
 
-impl CommandArguments for BalanceIndexesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = balance_indexes,
+	export = balance_indexes_command,
 
-		balance_indexes (
-			output,
-			self,
-		)
+	arguments = BalanceIndexesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		bundles_per_index: u64,
+	},
 
-	}
-
-}
-
-impl Command for BalanceIndexesCommand {
-
-	fn name (& self) -> & 'static str {
-		"balance-indexes"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("balance-indexes")
 			.about ("rewrites index files so they are a consistent size")
@@ -211,14 +180,11 @@ impl Command for BalanceIndexesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = BalanceIndexesArguments {
+		BalanceIndexesArguments {
 
 			repository_path:
 				args::path_required (
@@ -235,12 +201,10 @@ impl Command for BalanceIndexesCommand {
 					& clap_matches,
 					"bundles-per-index"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

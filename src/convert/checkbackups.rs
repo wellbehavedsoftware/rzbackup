@@ -18,25 +18,6 @@ use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
 
-pub fn check_backups_command (
-) -> Box <Command> {
-
-	Box::new (
-		CheckBackupsCommand {},
-	)
-
-}
-
-pub struct CheckBackupsArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	backup_name_hash_prefix: Option <String>,
-	move_broken: bool,
-}
-
-pub struct CheckBackupsCommand {
-}
-
 pub fn check_backups (
 	output: & Output,
 	arguments: & CheckBackupsArguments,
@@ -233,31 +214,19 @@ pub fn check_backups (
 
 }
 
-impl CommandArguments for CheckBackupsArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = check_backups,
+	export = check_backups_command,
 
-		check_backups (
-			output,
-			self,
-		)
+	arguments = CheckBackupsArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		backup_name_hash_prefix: Option <String>,
+		move_broken: bool,
+	},
 
-	}
-
-}
-
-impl Command for CheckBackupsCommand {
-
-	fn name (& self) -> & 'static str {
-		"check-backups"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("check-backups")
 			.about ("Checks backups for missing chunks")
@@ -301,14 +270,11 @@ impl Command for CheckBackupsCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = CheckBackupsArguments {
+		CheckBackupsArguments {
 
 			repository_path:
 				args::path_required (
@@ -330,12 +296,10 @@ impl Command for CheckBackupsCommand {
 					& clap_matches,
 					"backup-name-hash-prefix"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

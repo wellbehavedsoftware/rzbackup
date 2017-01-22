@@ -1,6 +1,8 @@
 pub mod args;
 
+#[ macro_use ]
 mod command;
+
 mod error;
 mod io;
 mod protobuf;

@@ -8,7 +8,7 @@ pub trait Command : Sync {
 
 	fn name (
 		& self,
-	) -> & 'static str;
+	) -> & str;
 
 	fn clap_subcommand <'a: 'b, 'b> (
 		& 'a self,
@@ -56,7 +56,7 @@ impl ParentCommand {
 
 impl Command for ParentCommand {
 
-	fn name (& self) -> & 'static str {
+	fn name (& self) -> & str {
 		self.name
 	}
 
@@ -120,5 +120,83 @@ impl Command for ParentCommand {
 
 }
 
+macro_rules! command {
+	(
+		name = $name:ident,
+		export = $export:ident,
+		arguments = $arguments_struct:ident {
+			$( $arguments_member_name:ident : $arguments_member_type:ty ), *,
+		},
+		clap_subcommand = $clap_subcommand:tt,
+		clap_arguments_parse = |$clap_matches:ident| $clap_arguments_parse:tt,
+	) => {
+
+		pub fn $export (
+		) -> Box <Command> {
+
+			Box::new (
+				ThisCommand {
+					name: stringify! ($name).replace ("_", "-"),
+				}
+			)
+
+		}
+
+		pub struct $arguments_struct {
+			$(
+				$arguments_member_name : $arguments_member_type
+			), *
+		}
+
+		impl CommandArguments for $arguments_struct {
+
+			fn perform (
+				& self,
+				output: & Output,
+			) -> Result <(), String> {
+
+				$name (
+					output,
+					self,
+				)
+
+			}
+
+		}
+
+		struct ThisCommand {
+			name: String,
+		}
+
+		impl Command for ThisCommand {
+
+			fn name (& self) -> & str {
+				& self.name
+			}
+
+			fn clap_subcommand <'a: 'b, 'b> (
+				& self,
+			) -> clap::App <'a, 'b> {
+
+				$clap_subcommand
+
+			}
+
+			fn clap_arguments_parse (
+				& self,
+				$clap_matches: & clap::ArgMatches,
+			) -> Box <CommandArguments> {
+
+				Box::new (
+					$clap_arguments_parse
+				)
+
+			}
+
+		}
+
+	}
+
+}
 
 // ex: noet ts=4 filetype=rust

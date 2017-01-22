@@ -14,23 +14,6 @@ use ::read::*;
 use ::write::*;
 use ::zbackup::data::*;
 
-pub fn gc_bundles_command (
-) -> Box <Command> {
-
-	Box::new (
-		GcBundlesCommand {},
-	)
-
-}
-
-pub struct GcBundlesArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-}
-
-pub struct GcBundlesCommand {
-}
-
 pub fn gc_bundles (
 	output: & Output,
 	arguments: & GcBundlesArguments,
@@ -457,31 +440,17 @@ fn compact_bundles (
 
 }
 
-impl CommandArguments for GcBundlesArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = gc_bundles,
+	export = gc_bundles_command,
 
-		gc_bundles (
-			output,
-			self,
-		)
+	arguments = GcBundlesArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+	},
 
-	}
-
-}
-
-impl Command for GcBundlesCommand {
-
-	fn name (& self) -> & 'static str {
-		"gc-bundles"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("gc-bundles")
 			.about ("Removes chunks from bundles which are not in any index")
@@ -506,14 +475,11 @@ impl Command for GcBundlesCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		Box::new (GcBundlesArguments {
+		GcBundlesArguments {
 
 			repository_path:
 				args::path_required (
@@ -525,10 +491,10 @@ impl Command for GcBundlesCommand {
 					& clap_matches,
 					"password-file"),
 
-		})
+		}
 
-	}
+	},
 
-}
+);
 
 // ex: noet ts=4 filetype=rust
