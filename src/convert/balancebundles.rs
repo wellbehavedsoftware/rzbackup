@@ -46,55 +46,59 @@ pub fn balance_bundles (
 
 	loop {
 
-		// begin transaction
+		{
 
-		let mut temp_files =
-			TempFileManager::new (
-				output,
-				& arguments.repository_path,
+			// begin transaction
+
+			let mut temp_files =
+				TempFileManager::new (
+					output,
+					& arguments.repository_path,
+				) ?;
+
+			// get list of index files
+
+			let old_index_ids_and_sizes = (
+				scan_index_files_with_sizes (
+					& arguments.repository_path)
 			) ?;
 
-		// get list of index files
+			output.message_format (
+				format_args! (
+					"Found {} index files",
+					old_index_ids_and_sizes.len ()));
 
-		let old_index_ids_and_sizes = (
-			scan_index_files_with_sizes (
-				& arguments.repository_path)
-		) ?;
+			// read indexes and discard any which are balanced
 
-		output.message_format (
-			format_args! (
-				"Found {} index files",
-				old_index_ids_and_sizes.len ()));
+			let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
+				Vec::new ();
 
-		// read indexes and discard any which are balanced
+			let mut new_bundles_total: u64 = 0;
 
-		let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
-			Vec::new ();
+			read_indexes_find_unbalanced (
+				output,
+				& repository,
+				& arguments,
+				minimum_chunk_count,
+				& old_index_ids_and_sizes,
+				& mut unbalanced_indexes,
+				& mut new_bundles_total,
+			) ?;
 
-		let mut new_bundles_total: u64 = 0;
+			// balance bundles
 
-		read_indexes_find_unbalanced (
-			output,
-			& repository,
-			& arguments,
-			minimum_chunk_count,
-			& old_index_ids_and_sizes,
-			& mut unbalanced_indexes,
-			& mut new_bundles_total,
-		) ?;
+			if balance_bundles_real (
+				output,
+				& repository,
+				& mut temp_files,
+				& arguments,
+				minimum_chunk_count,
+				& unbalanced_indexes,
+				new_bundles_total,
+			) ? {
+				break;
+			}
 
-		// balance bundles
-
-		if balance_bundles_real (
-			output,
-			& repository,
-			& mut temp_files,
-			& arguments,
-			minimum_chunk_count,
-			& unbalanced_indexes,
-			new_bundles_total,
-		) ? {
-			break;
 		}
 
 		// sleep a while
@@ -215,7 +219,6 @@ fn read_indexes_find_unbalanced (
 		output.status_progress (
 			read_index_size,
 			total_index_size);
-
 
 	}
 
@@ -347,6 +350,8 @@ fn balance_bundles_real (
 
 							output.clear_status ();
 
+							// write out remaining chunks from this bundle
+
 							while let Some ((
 								unbalanced_chunk_id,
 								unbalanced_chunk_data,
@@ -361,8 +366,20 @@ fn balance_bundles_real (
 
 							}
 
+							flush_bundle (
+								output,
+								& repository,
+								temp_files,
+								& mut balanced_chunks,
+								& mut new_index_entries,
+								new_bundles_count,
+								new_bundles_total,
+							) ?;
+
 							temp_files.delete (
 								unbalanced_bundle_path);
+
+							// write out remaining entries from this index
 
 							while let Some (& (
 								ref unbalanced_index_bundle_header,
@@ -388,6 +405,8 @@ fn balance_bundles_real (
 								temp_files,
 								& mut new_index_entries,
 							) ?;
+
+							// commit changes and return
 
 							output.message (
 								"Performing checkpoint");
