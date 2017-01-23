@@ -486,17 +486,25 @@ fn rename_or_copy_and_delete <
 				source_path,
 			) ?;
 
-		let mut target =
+		let target_temp_path =
+			target_path.join (".temp");
+
+		let mut target_temp =
 			File::create (
-				target_path,
+				& target_temp_path,
 			) ?;
 
 		io::copy (
 			& mut source,
-			& mut target,
+			& mut target_temp,
 		) ?;
 
-		target.sync_all () ?;
+		target_temp.sync_all () ?;
+
+		fs::rename (
+			target_temp_path,
+			target_path,
+		) ?;
 
 	}
 
