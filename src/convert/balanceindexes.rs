@@ -37,6 +37,7 @@ pub fn balance_indexes (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// get list of index files

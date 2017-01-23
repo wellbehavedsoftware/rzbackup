@@ -43,6 +43,7 @@ pub fn check_backups (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// load indexes

@@ -37,6 +37,7 @@ pub fn rebuild_indexes (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// get list of bundle files

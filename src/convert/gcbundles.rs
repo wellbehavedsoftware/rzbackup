@@ -39,6 +39,7 @@ pub fn gc_bundles (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// get list of bundle files

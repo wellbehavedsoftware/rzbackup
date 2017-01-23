@@ -4,6 +4,8 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 
 use errno;
 
@@ -28,12 +30,10 @@ impl TempFileManager {
 	pub fn new (
 		output: & Output,
 		repository_path: & Path,
+		sleep_time: Option <Duration>,
 	) -> Result <TempFileManager, String> {
 
-		// lock with flock
-
-		output.status (
-			"Waiting for repository lock ...");
+		// create or open lock file
 
 		let lock_path =
 			repository_path.join ("lock");
@@ -68,64 +68,33 @@ impl TempFileManager {
 
 		}
 
-		let flock_result = unsafe {
-			libc::flock (
-				lock_fd,
-				libc::LOCK_EX,
-			)
-		};
+		// obtain lock
 
-		if flock_result != 0 {
+		match sleep_time {
 
-			unsafe {
-				libc::close (lock_fd);
-			}
+			Some (sleep_time) =>
+				Self::lock_non_blocking (
+					output,
+					sleep_time,
+					lock_fd),
 
-			output.clear_status ();
+			None =>
+				Self::lock_blocking (
+					output,
+					lock_fd),
 
-			return Err (
-				format! (
-					"Error obtaining lock on file: {}",
-					lock_path.to_string_lossy ()));
-
-		}
-
-		// lock with fcntl
-
-		let mut fcntl_flock =
-			libc::flock {
-				l_type: F_WRLCK,
-				l_whence: libc::SEEK_SET as i16,
-				l_start: 0,
-				l_len: 0,
-				l_pid: 0,
-			};
-
-		let fcntl_result = unsafe {
-			libc::fcntl (
-				lock_fd,
-				libc::F_SETLKW,
-				& mut fcntl_flock
-					as * mut libc::flock,
-			)
-		};
-
-		if fcntl_result != 0 {
+		}.map_err (|error| {
 
 			unsafe {
 				libc::close (lock_fd);
 			}
 
-			output.clear_status ();
+			format! (
+				"Error obtaining lock on {}: {}",
+				lock_path.to_string_lossy (),
+				error)
 
-			return Err (
-				format! (
-					"Error obtaining lock on file: {}",
-					lock_path.to_string_lossy ()));
-
-		}
-
-		output.clear_status ();
+		}) ?;
 
 		// create tmp directory
 
@@ -160,6 +129,156 @@ impl TempFileManager {
 			temp_files: Vec::new (),
 			delete_files: Vec::new (),
 		})
+
+	}
+
+	fn lock_non_blocking (
+		output: & Output,
+		sleep_time: Duration,
+		lock_fd: libc::c_int,
+	) -> Result <(), String> {
+
+		output.status (
+			"Waiting for repository lock ...");
+
+		// lock with flock
+
+		loop {
+
+			let flock_result = unsafe {
+				libc::flock (
+					lock_fd,
+					libc::LOCK_EX | libc::LOCK_NB,
+				)
+			};
+
+			if flock_result != 0 {
+
+				if errno::errno () == errno::Errno (libc::EWOULDBLOCK) {
+
+					thread::sleep (
+						sleep_time);
+
+					continue;
+
+				}
+
+				output.clear_status ();
+
+				return Err (
+					format! (
+						"{}",
+						errno::errno ()));
+
+			}
+
+			break;
+
+		}
+
+		// lock with fcntl
+
+		let mut fcntl_flock =
+			libc::flock {
+				l_type: F_WRLCK,
+				l_whence: libc::SEEK_SET as i16,
+				l_start: 0,
+				l_len: 0,
+				l_pid: 0,
+			};
+
+		let fcntl_result = unsafe {
+			libc::fcntl (
+				lock_fd,
+				libc::F_SETLKW,
+				& mut fcntl_flock
+					as * mut libc::flock,
+			)
+		};
+
+		if fcntl_result != 0 {
+
+			output.clear_status ();
+
+			return Err (
+				format! (
+					"{}",
+					errno::errno ()));
+
+		}
+
+		// return
+
+		output.clear_status ();
+
+		Ok (())
+
+	}
+
+	fn lock_blocking (
+		output: & Output,
+		lock_fd: libc::c_int,
+	) -> Result <(), String> {
+
+		output.status (
+			"Waiting for repository lock ...");
+
+		// lock with flock
+
+		let flock_result = unsafe {
+			libc::flock (
+				lock_fd,
+				libc::LOCK_EX,
+			)
+		};
+
+		if flock_result != 0 {
+
+			output.clear_status ();
+
+			return Err (
+				format! (
+					"{}",
+					errno::errno ()));
+
+		}
+
+		// lock with fcntl
+
+		let mut fcntl_flock =
+			libc::flock {
+				l_type: F_WRLCK,
+				l_whence: libc::SEEK_SET as i16,
+				l_start: 0,
+				l_len: 0,
+				l_pid: 0,
+			};
+
+		let fcntl_result = unsafe {
+			libc::fcntl (
+				lock_fd,
+				libc::F_SETLKW,
+				& mut fcntl_flock
+					as * mut libc::flock,
+			)
+		};
+
+		if fcntl_result != 0 {
+
+			output.clear_status ();
+
+			return Err (
+				format! (
+					"{}",
+					errno::errno ()));
+
+		}
+
+		// return
+
+		output.clear_status ();
+
+		Ok (())
 
 	}
 

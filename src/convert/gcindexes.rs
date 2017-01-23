@@ -44,6 +44,7 @@ pub fn gc_indexes (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// load indexes

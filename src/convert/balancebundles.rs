@@ -54,6 +54,7 @@ pub fn balance_bundles (
 				TempFileManager::new (
 					output,
 					& arguments.repository_path,
+					Some (arguments.sleep_time),
 				) ?;
 
 			// get list of index files

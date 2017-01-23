@@ -41,6 +41,7 @@ pub fn check_indexes (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// get list of index files

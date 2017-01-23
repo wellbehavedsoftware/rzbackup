@@ -38,6 +38,7 @@ pub fn check_bundles (
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
+			None,
 		) ?;
 
 	// get a list of index files
