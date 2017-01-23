@@ -308,8 +308,13 @@ fn balance_bundles_real (
 						repository.encryption_key ()
 					) ?;
 
-				for (unbalanced_chunk_id, unbalanced_chunk_data)
-				in unbalanced_bundle {
+				let mut unbalanced_bundle_iter =
+					unbalanced_bundle.into_iter ();
+
+				while let Some ((
+					unbalanced_chunk_id,
+					unbalanced_chunk_data,
+				)) = unbalanced_bundle_iter.next () {
 
 					balanced_chunks.push (
 						(
@@ -340,6 +345,23 @@ fn balance_bundles_real (
 						if checkpoint_time < Instant::now () {
 
 							output.clear_status ();
+
+							while let Some ((
+								unbalanced_chunk_id,
+								unbalanced_chunk_data,
+							)) = unbalanced_bundle_iter.next () {
+
+								balanced_chunks.push (
+									(
+										unbalanced_chunk_id,
+										unbalanced_chunk_data,
+									)
+								);
+
+							}
+
+							temp_files.delete (
+								unbalanced_bundle_path);
 
 							while let Some (& (
 								ref unbalanced_index_bundle_header,
