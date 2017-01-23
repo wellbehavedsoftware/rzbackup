@@ -638,7 +638,7 @@ command! (
 
 				.long ("checkpoint-time")
 				.value_name ("CHECKPOINT-TIME")
-				.default_value ("5 minutes")
+				.default_value ("10 minutes")
 				.help ("Time between checkpoints")
 
 			)
