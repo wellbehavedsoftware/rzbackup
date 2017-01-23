@@ -10,27 +10,10 @@ use output::Output;
 use ::client::*;
 use ::misc::*;
 
-pub fn client_exit_command (
-) -> Box <Command> {
-
-	Box::new (
-		ClientExitCommand {},
-	)
-
-}
-
-pub struct ClientExitArguments {
-	server_hostname: String,
-	server_port: u16,
-}
-
-pub struct ClientExitCommand {
-}
-
-pub fn do_client_exit (
+fn do_client_exit (
 	output: & Output,
 	arguments: & ClientExitArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let mut stream =
 		io_result_with_prefix (
@@ -80,35 +63,21 @@ pub fn do_client_exit (
 	output.message (
 		"Server exit requested");
 
-	Ok (())
+	Ok (true)
 
 }
 
-impl CommandArguments for ClientExitArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = exit,
+	export = client_exit_command,
 
-		do_client_exit (
-			output,
-			self,
-		)
+	arguments = ClientExitArguments {
+		server_hostname: String,
+		server_port: u16,
+	},
 
-	}
-
-}
-
-impl Command for ClientExitCommand {
-
-	fn name (& self) -> & 'static str {
-		"exit"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("exit")
 			.about ("Instructs the server to exit")
@@ -123,12 +92,9 @@ impl Command for ClientExitCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
 		let (server_hostname, server_port) =
 			parse_server_address (
@@ -137,17 +103,17 @@ impl Command for ClientExitCommand {
 					"server-address"),
 			);
 
-		let arguments = ClientExitArguments {
-
+		ClientExitArguments {
 			server_hostname: server_hostname,
 			server_port: server_port,
+		}
 
-		};
+	},
 
-		Box::new (arguments)
+	action = |output, arguments| {
+		do_client_exit (output, arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

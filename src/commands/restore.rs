@@ -8,28 +8,10 @@ use output::Output;
 use ::Repository;
 use ::misc::*;
 
-pub fn restore_command (
-) -> Box <Command> {
-
-	Box::new (
-		RestoreCommand {},
-	)
-
-}
-
-pub struct RestoreArguments {
-	repository_path: PathBuf,
-	password_file_path: Option <PathBuf>,
-	backup_name: String,
-}
-
-pub struct RestoreCommand {
-}
-
 pub fn do_restore (
 	output: & Output,
 	arguments: & RestoreArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let repository =
 		string_result_with_prefix (
@@ -58,35 +40,22 @@ pub fn do_restore (
 			& mut stdout_lock),
 	) ?;
 
-	Ok (())
+	Ok (true)
 
 }
 
-impl CommandArguments for RestoreArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = restore,
+	export = restore_command,
 
-		do_restore (
-			output,
-			self,
-		)
+	arguments = RestoreArguments {
+		repository_path: PathBuf,
+		password_file_path: Option <PathBuf>,
+		backup_name: String,
+	},
 
-	}
-
-}
-
-impl Command for RestoreCommand {
-
-	fn name (& self) -> & 'static str {
-		"restore"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("restore")
 			.about ("Restores a backup from a ZBackup repository")
@@ -121,14 +90,11 @@ impl Command for RestoreCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = RestoreArguments {
+		RestoreArguments {
 
 			repository_path:
 				args::path_required (
@@ -145,12 +111,14 @@ impl Command for RestoreCommand {
 					& clap_matches,
 					"backup-name"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
+	action = |output, arguments| {
+		do_restore (output, arguments)
+	},
 
-}
+);
 
 // ex: noet ts=4 filetype=rust

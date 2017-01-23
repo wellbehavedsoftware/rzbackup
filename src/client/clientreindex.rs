@@ -10,27 +10,10 @@ use output::Output;
 use ::client::*;
 use ::misc::*;
 
-pub fn client_reindex_command (
-) -> Box <Command> {
-
-	Box::new (
-		ClientReindexCommand {},
-	)
-
-}
-
-pub struct ClientReindexArguments {
-	server_hostname: String,
-	server_port: u16,
-}
-
-pub struct ClientReindexCommand {
-}
-
 pub fn do_client_reindex (
 	output: & Output,
 	arguments: & ClientReindexArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let mut stream =
 		io_result_with_prefix (
@@ -80,35 +63,21 @@ pub fn do_client_reindex (
 	output.message (
 		"Reindex requested successfully");
 
-	Ok (())
+	Ok (true)
 
 }
 
-impl CommandArguments for ClientReindexArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = reindex,
+	export = client_reindex_command,
 
-		do_client_reindex (
-			output,
-			self,
-		)
+	arguments = ClientReindexArguments {
+		server_hostname: String,
+		server_port: u16,
+	},
 
-	}
-
-}
-
-impl Command for ClientReindexCommand {
-
-	fn name (& self) -> & 'static str {
-		"reindex"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("reindex")
 			.about ("Instructs the server to reload indexes")
@@ -123,12 +92,9 @@ impl Command for ClientReindexCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
 		let (server_hostname, server_port) =
 			parse_server_address (
@@ -137,17 +103,17 @@ impl Command for ClientReindexCommand {
 					"server-address"),
 			);
 
-		let arguments = ClientReindexArguments {
-
+		ClientReindexArguments {
 			server_hostname: server_hostname,
 			server_port: server_port,
+		}
 
-		};
+	},
 
-		Box::new (arguments)
+	action = |output, arguments| {
+		do_client_reindex (output, arguments)
+	},
 
-	}
-
-}
+);
 
 // ex: noet ts=4 filetype=rust

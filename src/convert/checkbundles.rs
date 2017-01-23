@@ -16,7 +16,7 @@ use ::zbackup::read::*;
 pub fn check_bundles (
 	output: & Output,
 	arguments: & CheckBundlesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -138,7 +138,7 @@ pub fn check_bundles (
 
 	}
 
-	// commit changes
+	// write changes to disk
 
 	output.status (
 		"Committing changes ...");
@@ -147,7 +147,9 @@ pub fn check_bundles (
 
 	output.status_done ();
 
-	Ok (())
+	// return
+
+	Ok (invalid_bundle_count == 0)
 
 }
 
@@ -223,6 +225,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		check_bundles (output, arguments)
 	},
 
 );

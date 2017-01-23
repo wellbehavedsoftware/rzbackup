@@ -17,7 +17,7 @@ use ::zbackup::data::*;
 pub fn gc_bundles (
 	output: & Output,
 	arguments: & GcBundlesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -120,7 +120,7 @@ pub fn gc_bundles (
 
 	// done, return
 
-	Ok (())
+	Ok (true)
 
 }
 
@@ -495,6 +495,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		gc_bundles (output, arguments)
 	},
 
 );

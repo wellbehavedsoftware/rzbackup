@@ -15,7 +15,7 @@ use ::zbackup::proto;
 pub fn rebuild_indexes (
 	output: & Output,
 	arguments: & RebuildIndexesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -148,7 +148,7 @@ pub fn rebuild_indexes (
 
 	output.status_done ();
 
-	Ok (())
+	Ok (true)
 
 }
 
@@ -221,6 +221,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		rebuild_indexes (output, arguments)
 	},
 
 );

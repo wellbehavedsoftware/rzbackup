@@ -34,15 +34,24 @@ fn main () {
 		parse_arguments (
 			& commands);
 
-	if let Err (error) =
-		arguments.perform (
-			& output,
-		) {
+	match arguments.perform (
+		& output,
+	) {
 
-		output.message (
-			error);
+		Ok (true) =>
+			process::exit (0),
 
-		process::exit (1);
+		Ok (false) =>
+			process::exit (1),
+
+		Err (error) => {
+
+			output.message (
+				error);
+
+			process::exit (1);
+
+		}
 
 	}
 

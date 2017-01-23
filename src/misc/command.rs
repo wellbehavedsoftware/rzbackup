@@ -26,7 +26,7 @@ pub trait CommandArguments {
 	fn perform (
 		& self,
 		output: & Output,
-	) -> Result <(), String>;
+	) -> Result <bool, String>;
 
 }
 
@@ -121,14 +121,27 @@ impl Command for ParentCommand {
 }
 
 macro_rules! command {
+
 	(
+
 		name = $name:ident,
+
 		export = $export:ident,
+
 		arguments = $arguments_struct:ident {
 			$( $arguments_member_name:ident : $arguments_member_type:ty ), *,
 		},
+
 		clap_subcommand = $clap_subcommand:tt,
-		clap_arguments_parse = |$clap_matches:ident| $clap_arguments_parse:tt,
+
+		clap_arguments_parse =
+			|$clap_matches:ident|
+			$clap_arguments_parse:tt,
+
+		action =
+			|$action_output:ident, $action_arguments:ident|
+			$action:tt,
+
 	) => {
 
 		pub fn $export (
@@ -153,12 +166,12 @@ macro_rules! command {
 			fn perform (
 				& self,
 				output: & Output,
-			) -> Result <(), String> {
+			) -> Result <bool, String> {
 
-				$name (
-					output,
-					self,
-				)
+				let $action_output = output;
+				let $action_arguments = self;
+
+				$action
 
 			}
 

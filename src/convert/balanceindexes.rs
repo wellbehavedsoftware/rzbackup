@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::process;
 
 use clap;
 
@@ -15,7 +14,7 @@ use ::read::*;
 pub fn balance_indexes (
 	output: & Output,
 	arguments: & BalanceIndexesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -123,6 +122,8 @@ pub fn balance_indexes (
 
 	}
 
+	// write changes to disk
+
 	output.status_done ();
 
 	output.status (
@@ -130,9 +131,11 @@ pub fn balance_indexes (
 
 	temp_files.commit () ?;
 
+	// clean up and return
+
 	output.status_done ();
 
-	process::exit (0);
+	Ok (true)
 
 }
 
@@ -205,6 +208,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		balance_indexes (output, arguments)
 	},
 
 );

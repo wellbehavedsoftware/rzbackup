@@ -21,7 +21,7 @@ use ::zbackup::data::*;
 pub fn check_backups (
 	output: & Output,
 	arguments: & CheckBackupsArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -212,7 +212,7 @@ pub fn check_backups (
 
 	}
 
-	Ok (())
+	Ok (error_backup_count == 0)
 
 }
 
@@ -300,6 +300,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		check_backups (output, arguments)
 	},
 
 );

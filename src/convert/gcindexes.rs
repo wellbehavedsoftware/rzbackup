@@ -22,7 +22,7 @@ use ::zbackup::proto;
 pub fn gc_indexes (
 	output: & Output,
 	arguments: & GcIndexesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -296,7 +296,7 @@ pub fn gc_indexes (
 
 	output.status_done ();
 
-	Ok (())
+	Ok (true)
 
 }
 
@@ -354,6 +354,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		gc_indexes (output, arguments)
 	},
 
 );

@@ -11,29 +11,10 @@ use ::CryptoReader;
 use ::Repository;
 use ::misc::*;
 
-pub fn decrypt_command (
-) -> Box <Command> {
-
-	Box::new (
-		DecryptCommand {}
-	)
-
-}
-
-pub struct DecryptArguments {
-	repository_path: PathBuf,
-	password_file_path: PathBuf,
-	encrypted_file_path: PathBuf,
-	include_iv: bool,
-}
-
-pub struct DecryptCommand {
-}
-
-fn do_decrypt (
+pub fn do_decrypt (
 	output: & Output,
 	arguments: & DecryptArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let repository =
 		string_result_with_prefix (
@@ -130,35 +111,23 @@ fn do_decrypt (
 
 	output.status_done ();
 
-	Ok (())
+	Ok (true)
 
 }
 
-impl CommandArguments for DecryptArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = decrypt,
+	export = decrypt_command,
 
-		do_decrypt (
-			output,
-			self,
-		)
+	arguments = DecryptArguments {
+		repository_path: PathBuf,
+		password_file_path: PathBuf,
+		encrypted_file_path: PathBuf,
+		include_iv: bool,
+	},
 
-	}
-
-}
-
-impl Command for DecryptCommand {
-
-	fn name (& self) -> & 'static str {
-		"decrypt"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("decrypt")
 			.about ("Decrypts an encrypted file in a ZBackup repository")
@@ -201,14 +170,11 @@ impl Command for DecryptCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
-		let arguments = DecryptArguments {
+		DecryptArguments {
 
 			repository_path:
 				args::path_required (
@@ -230,12 +196,14 @@ impl Command for DecryptCommand {
 					& clap_matches,
 					"include-iv"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
+	action = |output, arguments| {
+		do_decrypt (output, arguments)
+	},
 
-}
+);
 
 // ex: noet ts=4 filetype=rust

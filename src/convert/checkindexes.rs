@@ -19,7 +19,7 @@ use ::zbackup::write::*;
 pub fn check_indexes (
 	output: & Output,
 	arguments: & CheckIndexesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	// open repository
 
@@ -295,7 +295,10 @@ pub fn check_indexes (
 
 	output.status_done ();
 
-	Ok (())
+	Ok (
+		missing_chunk_count + duplicated_chunk_count > 0
+		&& ! arguments.repair
+	)
 
 }
 
@@ -380,6 +383,10 @@ command! (
 
 		}
 
+	},
+
+	action = |output, arguments| {
+		check_indexes (output, arguments)
 	},
 
 );

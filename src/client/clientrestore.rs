@@ -11,28 +11,10 @@ use output::Output;
 use ::client::*;
 use ::misc::*;
 
-pub fn client_restore_command (
-) -> Box <Command> {
-
-	Box::new (
-		ClientRestoreCommand {},
-	)
-
-}
-
-pub struct ClientRestoreArguments {
-	server_hostname: String,
-	server_port: u16,
-	backup_name: String,
-}
-
-pub struct ClientRestoreCommand {
-}
-
-pub fn do_client_restore (
+fn do_client_restore (
 	output: & Output,
 	arguments: & ClientRestoreArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let mut stream =
 		io_result_with_prefix (
@@ -92,35 +74,22 @@ pub fn do_client_restore (
 	output.message (
 		"Restore complete");
 
-	Ok (())
+	Ok (true)
 
 }
 
-impl CommandArguments for ClientRestoreArguments {
+command! (
 
-	fn perform (
-		& self,
-		output: & Output,
-	) -> Result <(), String> {
+	name = restore,
+	export = client_restore_command,
 
-		do_client_restore (
-			output,
-			self,
-		)
+	arguments = ClientRestoreArguments {
+		server_hostname: String,
+		server_port: u16,
+		backup_name: String,
+	},
 
-	}
-
-}
-
-impl Command for ClientRestoreCommand {
-
-	fn name (& self) -> & 'static str {
-		"restore"
-	}
-
-	fn clap_subcommand <'a: 'b, 'b> (
-		& self,
-	) -> clap::App <'a, 'b> {
+	clap_subcommand = {
 
 		clap::SubCommand::with_name ("restore")
 			.about ("Restores a backup from the server")
@@ -145,12 +114,9 @@ impl Command for ClientRestoreCommand {
 
 			)
 
-	}
+	},
 
-	fn clap_arguments_parse (
-		& self,
-		clap_matches: & clap::ArgMatches,
-	) -> Box <CommandArguments> {
+	clap_arguments_parse = |clap_matches| {
 
 		let (server_hostname, server_port) =
 			parse_server_address (
@@ -159,7 +125,7 @@ impl Command for ClientRestoreCommand {
 					"server-address"),
 			);
 
-		let arguments = ClientRestoreArguments {
+		ClientRestoreArguments {
 
 			server_hostname: server_hostname,
 			server_port: server_port,
@@ -169,12 +135,14 @@ impl Command for ClientRestoreCommand {
 					& clap_matches,
 					"backup-name"),
 
-		};
+		}
 
-		Box::new (arguments)
+	},
 
-	}
+	action = |output, arguments| {
+		do_client_restore (output, arguments)
+	},
 
-}
+);
 
 // ex: noet ts=4 filetype=rust

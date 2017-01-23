@@ -25,7 +25,7 @@ use ::zbackup::proto;
 pub fn balance_bundles (
 	output: & Output,
 	arguments: & BalanceBundlesArguments,
-) -> Result <(), String> {
+) -> Result <bool, String> {
 
 	let minimum_chunk_count: u64 =
 		arguments.chunks_per_bundle * arguments.fill_factor / 100;
@@ -119,7 +119,7 @@ pub fn balance_bundles (
 
 	}
 
-	Ok (())
+	Ok (true)
 
 }
 
@@ -721,6 +721,10 @@ command! (
 
 		arguments
 
+	},
+
+	action = |output, arguments| {
+		balance_bundles (output, arguments)
 	},
 
 );
