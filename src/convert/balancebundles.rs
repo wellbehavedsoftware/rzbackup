@@ -98,16 +98,18 @@ pub fn balance_bundles (
 
 		// sleep a while
 
-		if arguments.sleep_time != Duration.from_secs (0) {
+		if arguments.sleep_time != Duration::from_secs (0) {
 
 			output.status_format (
 				format_args! (
-					"Sleeping ...");
+					"Sleeping ..."));
 
 			thread::sleep (
 				arguments.sleep_time);
 
 			output.status_done ();
+
+		}
 
 	}
 
