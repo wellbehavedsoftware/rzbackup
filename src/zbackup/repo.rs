@@ -32,7 +32,6 @@ use output::Output;
 
 use protobuf::stream::CodedInputStream;
 
-use rustc_serialize::hex::FromHex;
 use rustc_serialize::hex::ToHex;
 
 use misc::*;
@@ -390,12 +389,24 @@ impl Repository {
 				let file_name =
 					dir_entry.file_name ().to_str ().unwrap ().to_owned ();
 
-				let bundle_id =
-					to_array_24 (
-						& file_name.from_hex ().unwrap ());
+				match bundle_id_parse (
+					& file_name,
+				) {
 
-				bundle_ids.insert (
-					bundle_id);
+					Ok (bundle_id) => {
+
+						bundle_ids.insert (
+							bundle_id);
+
+					},
+
+					Err (_) =>
+						output.message_format (
+							format_args! (
+								"Ignoring invalid bundle name: {}",
+								file_name)),
+
+				}
 
 			}
 
