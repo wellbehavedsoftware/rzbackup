@@ -41,6 +41,7 @@ pub fn check_backups (
 
 	let _temp_files =
 		TempFileManager::new (
+			output,
 			& arguments.repository_path,
 		) ?;
 

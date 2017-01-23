@@ -37,6 +37,7 @@ pub fn gc_bundles (
 
 	let mut temp_files =
 		TempFileManager::new (
+			output,
 			& arguments.repository_path,
 		) ?;
 

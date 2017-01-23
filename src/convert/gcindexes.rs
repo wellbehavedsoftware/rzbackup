@@ -42,6 +42,7 @@ pub fn gc_indexes (
 
 	let mut temp_files =
 		TempFileManager::new (
+			output,
 			& arguments.repository_path,
 		) ?;
 

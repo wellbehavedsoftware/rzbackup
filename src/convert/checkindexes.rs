@@ -39,6 +39,7 @@ pub fn check_indexes (
 
 	let mut temp_files =
 		TempFileManager::new (
+			output,
 			& arguments.repository_path,
 		) ?;
 

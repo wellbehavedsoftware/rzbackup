@@ -9,6 +9,8 @@ use errno;
 
 use libc;
 
+use output::Output;
+
 use rand;
 use rand::Rng;
 
@@ -24,10 +26,14 @@ pub struct TempFileManager {
 impl TempFileManager {
 
 	pub fn new (
+		output: & Output,
 		repository_path: & Path,
 	) -> Result <TempFileManager, String> {
 
 		// lock with flock
+
+		output.status (
+			"Waiting for repository lock ...");
 
 		let lock_path =
 			repository_path.join ("lock");
@@ -52,6 +58,8 @@ impl TempFileManager {
 
 		if lock_fd < 0 {
 
+			output.clear_status ();
+
 			return Err (
 				format! (
 					"Error creating lock file {}: {}",
@@ -72,6 +80,8 @@ impl TempFileManager {
 			unsafe {
 				libc::close (lock_fd);
 			}
+
+			output.clear_status ();
 
 			return Err (
 				format! (
@@ -106,12 +116,16 @@ impl TempFileManager {
 				libc::close (lock_fd);
 			}
 
+			output.clear_status ();
+
 			return Err (
 				format! (
 					"Error obtaining lock on file: {}",
 					lock_path.to_string_lossy ()));
 
 		}
+
+		output.clear_status ();
 
 		// create tmp directory
 
