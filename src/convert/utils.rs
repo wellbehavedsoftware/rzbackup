@@ -6,6 +6,8 @@ use std::path::PathBuf;
 
 use crypto::sha1::Sha1;
 
+use output::Output;
+
 use protobuf::stream::CodedInputStream;
 
 use rustc_serialize::hex::ToHex;
@@ -225,6 +227,7 @@ fn scan_backup_files_real (
 pub fn scan_bundle_files <
 	RepositoryPath: AsRef <Path>,
 > (
+	output: & Output,
 	repository_path: RepositoryPath,
 ) -> Result <Vec <BundleId>, String> {
 
@@ -264,13 +267,21 @@ pub fn scan_bundle_files <
 			let bundle_name =
 				file_name.to_string_lossy ();
 
-			let bundle_id =
-				bundle_id_parse (
-					bundle_name.as_ref (),
-				) ?;
+			match bundle_id_parse (
+				bundle_name.as_ref (),
+			) {
 
-			bundle_ids.push (
-				bundle_id);
+				Ok (bundle_id) =>
+					bundle_ids.push (
+						bundle_id),
+
+				Err (_) =>
+					output.message_format (
+						format_args! (
+							"Ignoring invalid bundle name: {}",
+							bundle_name)),
+
+			}
 
 		}
 

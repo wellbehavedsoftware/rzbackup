@@ -44,10 +44,11 @@ pub fn gc_bundles (
 
 	// get list of bundle files
 
-	let old_bundles = (
+	let old_bundles =
 		scan_bundle_files (
-			& arguments.repository_path)
-	) ?;
+			output,
+			& arguments.repository_path,
+		) ?;
 
 	output.message_format (
 		format_args! (

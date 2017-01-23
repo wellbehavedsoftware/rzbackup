@@ -66,6 +66,7 @@ pub fn check_indexes (
 
 	let bundle_ids: HashSet <BundleId> = (
 		scan_bundle_files (
+			output,
 			& arguments.repository_path,
 		) ?
 	).into_iter ().collect ();

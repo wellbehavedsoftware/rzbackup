@@ -44,6 +44,7 @@ pub fn rebuild_indexes (
 
 	let bundle_ids =
 		scan_bundle_files (
+			output,
 			& arguments.repository_path,
 		) ?;
 
