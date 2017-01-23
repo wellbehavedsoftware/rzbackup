@@ -98,8 +98,16 @@ pub fn balance_bundles (
 
 		// sleep a while
 
-		thread::sleep (
-			arguments.sleep_time);
+		if arguments.sleep_time != Duration.from_secs (0) {
+
+			output.status_format (
+				format_args! (
+					"Sleeping ...");
+
+			thread::sleep (
+				arguments.sleep_time);
+
+			output.status_done ();
 
 	}
 
@@ -256,10 +264,13 @@ fn balance_bundles_real (
 		ref unbalanced_index_entries,
 	) in unbalanced_indexes {
 
-		for & (
+		let mut unbalanced_index_entries_iter =
+			unbalanced_index_entries.iter ();
+
+		while let Some (& (
 			ref unbalanced_index_bundle_header,
 			ref unbalanced_index_bundle_info,
-		) in unbalanced_index_entries {
+		)) = unbalanced_index_entries_iter.next () {
 
 			let unbalanced_bundle_id =
 				unbalanced_index_bundle_header.get_id ().to_owned ();
@@ -322,6 +333,46 @@ fn balance_bundles_real (
 
 						new_bundles_count += 1;
 
+						// handle checkpoints
+
+						if checkpoint_time < Instant::now () {
+
+							output.clear_status ();
+
+							while let Some (& (
+								ref unbalanced_index_bundle_header,
+								ref unbalanced_index_bundle_info,
+							)) = unbalanced_index_entries_iter.next () {
+
+								new_index_entries.push (
+									(
+										unbalanced_index_bundle_header.clone (),
+										unbalanced_index_bundle_info.clone (),
+									)
+								);
+
+							}
+
+							temp_files.delete (
+								repository.index_path (
+									* unbalanced_index_id));
+
+							flush_index (
+								output,
+								& repository,
+								temp_files,
+								& mut new_index_entries,
+							) ?;
+
+							output.message (
+								"Performing checkpoint");
+
+							temp_files.commit () ?;
+
+							return Ok (false);
+
+						}
+
 						output.status (
 							"Reading bundles");
 
@@ -340,29 +391,6 @@ fn balance_bundles_real (
 			repository.index_path (
 				* unbalanced_index_id));
 
-		// handle checkpoints
-
-		if checkpoint_time < Instant::now () {
-
-			output.clear_status ();
-
-			output.message (
-				"Performing checkpoint");
-
-			flush_bundle (
-				output,
-				& repository,
-				temp_files,
-				& mut balanced_chunks,
-				& mut new_index_entries,
-				new_bundles_count,
-				new_bundles_total,
-			) ?;
-
-			return Ok (false);
-
-		}
-
 	}
 
 	output.clear_status ();
@@ -379,6 +407,15 @@ fn balance_bundles_real (
 		new_bundles_total,
 	) ?;
 
+	flush_index (
+		output,
+		& repository,
+		temp_files,
+		& mut new_index_entries,
+	) ?;
+
+	temp_files.commit () ?;
+
 	Ok (true)
 
 }
@@ -393,119 +430,118 @@ fn flush_bundle (
 	new_bundles_total: u64,
 ) -> Result <(), String> {
 
-	if ! balanced_chunks.is_empty () {
-
-		output.status_format (
-			format_args! (
-				"Writing bundle {} of {} ...",
-				new_bundles_count + 1,
-				new_bundles_total));
-
-	} else {
-
-		output.status (
-			"Writing final index");
-
+	if balanced_chunks.is_empty () {
+		return Ok (())
 	}
 
-	// write bundle
+	output.status_format (
+		format_args! (
+			"Writing bundle {} of {} ...",
+			new_bundles_count + 1,
+			new_bundles_total));
 
-	if ! balanced_chunks.is_empty () {
+	let new_bundle_bytes: Vec <u8> =
+		rand::thread_rng ()
+			.gen_iter::<u8> ()
+			.take (24)
+			.collect ();
 
-		let new_bundle_bytes: Vec <u8> =
-			rand::thread_rng ()
-				.gen_iter::<u8> ()
-				.take (24)
-				.collect ();
+	let new_bundle_name: String =
+		new_bundle_bytes.to_hex ();
 
-		let new_bundle_name: String =
-			new_bundle_bytes.to_hex ();
+	let new_bundle_path =
+		repository.path ()
+			.join ("bundles")
+			.join (& new_bundle_name [0 .. 2])
+			.join (& new_bundle_name);
 
-		let new_bundle_path =
-			repository.path ()
-				.join ("bundles")
-				.join (& new_bundle_name [0 .. 2])
-				.join (& new_bundle_name);
-
-		let new_bundle_file =
-			Box::new (
-				temp_files.create (
-					new_bundle_path,
-				) ?
-			);
-
-		let total_chunks =
-			balanced_chunks.len () as u64;
-
-		let new_index_bundle_info =
-			write_bundle (
-				new_bundle_file,
-				repository.encryption_key (),
-				& balanced_chunks,
-				|chunks_written| {
-
-					output.status_progress (
-						chunks_written,
-						total_chunks)
-
-				}
-			) ?;
-
-		let mut new_index_bundle_header =
-			proto::IndexBundleHeader::new ();
-
-		new_index_bundle_header.set_id (
-			new_bundle_bytes);
-
-		new_index_entries.push (
-			(
-				new_index_bundle_header,
-				new_index_bundle_info,
-			)
+	let new_bundle_file =
+		Box::new (
+			temp_files.create (
+				new_bundle_path,
+			) ?
 		);
 
-		balanced_chunks.clear ();
+	let total_chunks =
+		balanced_chunks.len () as u64;
 
-	}
-
-	// write indexes
-
-	if ! new_index_entries.is_empty () {
-
-		let new_index_bytes: Vec <u8> =
-			rand::thread_rng ()
-				.gen_iter::<u8> ()
-				.take (24)
-				.collect ();
-
-		let new_index_name: String =
-			new_index_bytes.to_hex ();
-
-		let new_index_path =
-			repository.path ()
-				.join ("index")
-				.join (& new_index_name);
-
-		let new_index_file =
-			Box::new (
-				temp_files.create (
-					new_index_path,
-				) ?
-			);
-
-		write_index (
-			new_index_file,
+	let new_index_bundle_info =
+		write_bundle (
+			new_bundle_file,
 			repository.encryption_key (),
-			& new_index_entries,
+			& balanced_chunks,
+			|chunks_written| {
+
+				output.status_progress (
+					chunks_written,
+					total_chunks)
+
+			}
 		) ?;
 
-		new_index_entries.clear ();
+	let mut new_index_bundle_header =
+		proto::IndexBundleHeader::new ();
 
+	new_index_bundle_header.set_id (
+		new_bundle_bytes);
+
+	new_index_entries.push (
+		(
+			new_index_bundle_header,
+			new_index_bundle_info,
+		)
+	);
+
+	balanced_chunks.clear ();
+
+	output.status_done ();
+
+	Ok (())
+
+}
+
+fn flush_index (
+	output: & Output,
+	repository: & Repository,
+	temp_files: & mut TempFileManager,
+	new_index_entries: & mut Vec <IndexEntry>,
+) -> Result <(), String> {
+
+	if new_index_entries.is_empty () {
+		return Ok (());
 	}
 
-	// commit and return
+	output.status (
+		"Writing index ...");
 
-	temp_files.commit () ?;
+	let new_index_bytes: Vec <u8> =
+		rand::thread_rng ()
+			.gen_iter::<u8> ()
+			.take (24)
+			.collect ();
+
+	let new_index_name: String =
+		new_index_bytes.to_hex ();
+
+	let new_index_path =
+		repository.path ()
+			.join ("index")
+			.join (& new_index_name);
+
+	let new_index_file =
+		Box::new (
+			temp_files.create (
+				new_index_path,
+			) ?
+		);
+
+	write_index (
+		new_index_file,
+		repository.encryption_key (),
+		& new_index_entries,
+	) ?;
+
+	new_index_entries.clear ();
 
 	output.status_done ();
 
