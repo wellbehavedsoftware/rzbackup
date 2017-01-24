@@ -147,7 +147,10 @@ pub fn check_bundles (
 
 	output.status_done ();
 
-	// return
+	// clean up and return
+
+	repository.close (
+		output);
 
 	Ok (invalid_bundle_count == 0)
 

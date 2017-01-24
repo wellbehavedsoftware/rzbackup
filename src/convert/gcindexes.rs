@@ -287,7 +287,7 @@ pub fn gc_indexes (
 			indexes_modified,
 			indexes_removed));
 
-	// commit changes and return
+	// commit changes
 
 	output.status (
 		"Committing changes ...");
@@ -295,6 +295,11 @@ pub fn gc_indexes (
 	temp_files.commit () ?;
 
 	output.status_done ();
+
+	// clean up and return
+
+	repository.close (
+		output);
 
 	Ok (true)
 

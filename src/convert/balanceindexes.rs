@@ -122,18 +122,21 @@ pub fn balance_indexes (
 
 	}
 
-	// write changes to disk
-
 	output.status_done ();
+
+	// write changes to disk
 
 	output.status (
 		"Committing changes ...");
 
 	temp_files.commit () ?;
 
+	output.status_done ();
+
 	// clean up and return
 
-	output.status_done ();
+	repository.close (
+		output);
 
 	Ok (true)
 

@@ -1,7 +1,5 @@
 #![ allow (unused_parens) ]
 
-extern crate num_cpus;
-
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::LinkedList;
@@ -27,6 +25,8 @@ use futures::Future;
 use futures_cpupool::CpuPool;
 
 use lru_cache::LruCache;
+
+use num_cpus;
 
 use output::Output;
 
@@ -126,7 +126,7 @@ impl Repository {
 				MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES,
 
 			max_threads:
-				num_cpus::get (),
+				num_cpus::get () * 2,
 
 			filesystem_cache_path:
 				FILESYSTEM_CACHE_PATH.to_owned (),
@@ -154,11 +154,21 @@ impl Repository {
 		password_file_path: Option <PasswordFilePath>,
 	) -> Result <Repository, String> {
 
-		let repository_path =
-			repository_path.as_ref ();
+		Self::open_impl (
+			output,
+			repository_config,
+			repository_path.as_ref (),
+			password_file_path.as_ref ().map (|path| path.as_ref ()),
+		)
 
-		let password_file_path =
-			password_file_path.as_ref ();
+	}
+
+	fn open_impl (
+		output: & Output,
+		repository_config: RepositoryConfig,
+		repository_path: & Path,
+		password_file_path: Option <& Path>,
+	) -> Result <Repository, String> {
 
 		// load info file
 
@@ -1674,6 +1684,22 @@ impl Repository {
 
 	}
 
+	/// This method closes the repository, removing all temporary files
+
+	pub fn close (
+		self,
+		output: & Output,
+	) {
+
+		output.status (
+			"Closing repository");
+
+		drop (self);
+
+		output.status_done ();
+
+	}
+
 	/// This is an accessor method to access the `RepositoryConfig` struct which
 	/// was used to construct this `Repository`.
 
@@ -1682,6 +1708,8 @@ impl Repository {
 	) -> & RepositoryConfig {
 		& self.data.config
 	}
+
+	/// This is an accessor method to access the repository's `path`
 
 	pub fn path (
 		& self,

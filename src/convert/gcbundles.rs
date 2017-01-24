@@ -119,7 +119,10 @@ pub fn gc_bundles (
 		& other_chunks_seen,
 	) ?;
 
-	// done, return
+	// clean up and return
+
+	repository.close (
+		output);
 
 	Ok (true)
 

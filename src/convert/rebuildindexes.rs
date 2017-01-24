@@ -227,7 +227,7 @@ impl <'a> IndexRebuilder <'a> {
 
 		}
 
-		// commit changes and return
+		// commit changes
 
 		output.status (
 			"Committing changes ...");
@@ -235,6 +235,13 @@ impl <'a> IndexRebuilder <'a> {
 		temp_files.commit () ?;
 
 		output.status_done ();
+
+		// clean up and return
+
+		// TODO not sure how to do this
+
+		//self.repository.close (
+		//	output);
 
 		Ok (true)
 

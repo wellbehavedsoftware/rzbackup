@@ -119,6 +119,11 @@ pub fn balance_bundles (
 
 	}
 
+	// clean up and return
+
+	repository.close (
+		output);
+
 	Ok (true)
 
 }

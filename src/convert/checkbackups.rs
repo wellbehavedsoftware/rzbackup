@@ -213,6 +213,11 @@ pub fn check_backups (
 
 	}
 
+	// clean up and return
+
+	repository.close (
+		output);
+
 	Ok (error_backup_count == 0)
 
 }

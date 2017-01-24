@@ -296,6 +296,11 @@ pub fn check_indexes (
 
 	output.status_done ();
 
+	// clean up and return
+
+	repository.close (
+		output);
+
 	Ok (
 		missing_chunk_count + duplicated_chunk_count > 0
 		&& ! arguments.repair

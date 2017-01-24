@@ -39,10 +39,15 @@ pub fn run_server (
 		|| format! (
 			"RZBackup server encountered error: "),
 		run_server_listener (
-			repository,
+			repository.clone (),
 			& arguments.listen_address,
 		),
 	) ?;
+
+	// clean up and return
+
+	repository.close (
+		output);
 
 	output.message (
 		"RZBackup server terminating normally");

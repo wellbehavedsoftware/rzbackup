@@ -40,6 +40,11 @@ pub fn do_restore (
 			& mut stdout_lock),
 	) ?;
 
+	// clean up and return
+
+	repository.close (
+		output);
+
 	Ok (true)
 
 }
