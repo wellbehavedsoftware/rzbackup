@@ -384,7 +384,7 @@ pub fn flush_index_entries (
 pub fn collect_chunks_from_backup (
 	repository: & Repository,
 	chunk_ids: & mut HashSet <ChunkId>,
-	backup_file: & Path,
+	backup_name: & Path,
 ) -> Result <(), String> {
 
 	// load backup
@@ -393,7 +393,7 @@ pub fn collect_chunks_from_backup (
 		read_backup_file (
 			repository.path ()
 				.join ("backups")
-				.join (backup_file),
+				.join (backup_name),
 			repository.encryption_key (),
 		) ?;
 

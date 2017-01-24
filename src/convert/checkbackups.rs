@@ -117,12 +117,12 @@ pub fn check_backups (
 		let mut backup_chunks: HashSet <ChunkId> =
 			HashSet::new ();
 
-		let backup_expanded =
+		let backup_expand_error =
 			collect_chunks_from_backup (
 				& repository,
 				& mut backup_chunks,
-				& backup_path,
-			).is_ok ();
+				& backup_name,
+			).err ();
 
 		let missing_chunks: Vec <ChunkId> =
 			backup_chunks.iter ().filter (
@@ -133,12 +133,13 @@ pub fn check_backups (
 
 			).map (|&c| c).collect ();
 
-		if ! backup_expanded {
+		if let Some (ref error) = backup_expand_error {
 
 			output.message_format (
 				format_args! (
-					"Backup {} could not be expanded due to missing chunks",
-					backup_name.to_string_lossy ()));
+					"Backup {} could not be expanded: {}",
+					backup_name.to_string_lossy (),
+					error));
 
 		} else if ! missing_chunks.is_empty () {
 
@@ -151,7 +152,7 @@ pub fn check_backups (
 
 		}
 
-		if ! backup_expanded || ! missing_chunks.is_empty () {
+		if backup_expand_error.is_some () || ! missing_chunks.is_empty () {
 
 			if arguments.move_broken {
 
