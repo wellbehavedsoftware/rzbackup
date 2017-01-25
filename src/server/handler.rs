@@ -322,6 +322,17 @@ fn handle_status (
 		"\n",
 	)) ?;
 
+	io_result (write! (
+		writer,
+		"  num-loads: {}\n",
+		status.bundle_loader.num_loads,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
 	if status.bundle_loader.loading_later.is_empty () {
 
 		io_result (write! (
