@@ -122,11 +122,11 @@ pub type IndexEntry = (
 
 /// The default number of uncompressed memory cache entries. This number of
 /// chunks will be kept in memory uncompressed, in an LRU cache.
-pub const MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x100;
+pub const MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x10;
 
 /// The default number of uncompressed memory cache entries. This number of
 /// chunks will be kept in memory after LZO-compression, in an LRU cache.
-pub const MAX_COMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x800;
+pub const MAX_COMPRESSED_MEMORY_CACHE_ENTRIES: usize = 0x100;
 
 /// The default number of compressed filesystem cache entries. This number of
 /// chunks will be stored in a temporary directory after LZO-compression.
