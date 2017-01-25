@@ -44,8 +44,8 @@ In cargo.toml:
 
 ```toml
 [dependencies]
-output = "0.4"
-rzbackup = "3.1"
+output = "0.5"
+rzbackup = "3.3"
 ```
 
 A basic example (from `examples/restore.rs`):
