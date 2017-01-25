@@ -30,7 +30,7 @@
 	lru-cache = "0.1"
 	minilzo = "0.1"
 	num_cpus = "1.2"
-	output = "0.4"
+	output = "0.5"
 	protobuf = "1.1"
 	rand = "0.3"
 	regex = "0.2"

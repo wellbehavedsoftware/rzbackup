@@ -3,14 +3,18 @@ pub mod args;
 #[ macro_use ]
 mod command;
 
+mod cloning_shared_future;
 mod error;
 mod io;
 mod protobuf;
+//mod task_queue;
 
+pub use self::cloning_shared_future::*;
 pub use self::command::*;
 pub use self::error::*;
 pub use self::io::*;
 pub use self::protobuf::*;
+//pub use self::task_queue::*;
 
 pub fn to_array_24 (
 	slice: & [u8],

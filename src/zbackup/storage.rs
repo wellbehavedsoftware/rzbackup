@@ -1,5 +1,17 @@
 #![ allow (unused_parens) ]
 
+use std::error::Error;
+use std::hash::Hash;
+use std::io::Read;
+use std::io::Write;
+use std::fs;
+use std::fs::File;
+use std::ops::DerefMut;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use futures;
 use futures::BoxFuture;
 use futures::Future;
@@ -10,84 +22,120 @@ use lru_cache::LruCache;
 
 use minilzo;
 
-use std::error::Error;
-use std::io::Read;
-use std::io::Write;
-use std::fs;
-use std::fs::File;
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::path::Path;
-use std::sync::Arc;
-use std::sync::Mutex;
+use output::Output;
+
+use rand;
+use rand::Rng;
+
+pub trait StorageManagerKey: Clone + Eq + Hash + Send + Sync + 'static {
+}
+
+impl <Type> StorageManagerKey for Type
+where Type: Clone + Eq + Hash + Send + Sync + 'static {
+}
 
 #[ derive (Clone) ]
-pub struct StorageManager {
+pub struct StorageManager <Key: StorageManagerKey> {
 	data: Arc <StorageManagerData>,
-	state: Arc <Mutex <StorageManagerState>>,
+	state: Arc <Mutex <StorageManagerState <Key>>>,
 	cpu_pool: CpuPool,
 }
 
 #[ derive (Clone) ]
 struct StorageManagerData {
-	path: String,
+	path: PathBuf,
+	debug: bool,
 }
 
+#[ derive (Clone) ]
 enum MemoryCacheItem {
 	Compressed (Arc <Vec <u8>>, usize),
 	Uncompressed (Arc <Vec <u8>>),
 }
 
-struct StorageManagerState {
-	uncompressed_memory_items: LruCache <String, Arc <Vec <u8>>>,
-	compressed_memory_items: LruCache <String, MemoryCacheItem>,
-	filesystem_items: LruCache <String, Arc <FilesystemItem>>,
+struct StorageManagerState <Key: StorageManagerKey> {
+
+	uncompressed_memory_items: LruCache <Key, Arc <Vec <u8>>>,
+	compressed_memory_items: LruCache <Key, MemoryCacheItem>,
+	live_filesystem_items: LruCache <Key, Arc <FilesystemItem>>,
+	dead_filesystem_items: LruCache <Key, Arc <FilesystemItem>>,
+
+	uncompressed_memory_hits: u64,
+	compressed_memory_hits: u64,
+	live_filesystem_hits: u64,
+	dead_filesystem_hits: u64,
+	misses: u64,
+
 }
 
 struct FilesystemItem {
 	storage_manager: Arc <StorageManagerData>,
-	key: String,
+	filename: String,
 	compressed: bool,
 	uncompressed_size: usize,
 	stored_size: usize,
 }
 
-impl StorageManager {
+pub struct StorageManagerStatus {
 
+	pub uncompressed_memory_items: u64,
+	pub compressed_memory_items: u64,
+	pub live_filesystem_items: u64,
+	pub dead_filesystem_items: u64,
+
+	pub uncompressed_memory_hits: u64,
+	pub compressed_memory_hits: u64,
+	pub live_filesystem_hits: u64,
+	pub dead_filesystem_hits: u64,
+	pub misses: u64,
+
+}
+
+impl <Key: StorageManagerKey> StorageManager <Key> {
+
+	#[ inline ]
 	pub fn new <PathRef: AsRef <Path>> (
 		path_ref: PathRef,
-		cpu_pool: CpuPool,
+		num_threads: usize,
 		uncompressed_memory_cache_size: usize,
 		compressed_memory_cache_size: usize,
-		filesystem_cache_size: usize,
-	) -> Result <StorageManager, String> {
+		live_filesystem_cache_size: usize,
+		dead_filesystem_cache_size: usize,
+		debug: bool,
+	) -> Result <StorageManager <Key>, String> {
 
-		// get string from path
+		Self::new_impl (
+			path_ref.as_ref (),
+			num_threads,
+			uncompressed_memory_cache_size,
+			compressed_memory_cache_size,
+			live_filesystem_cache_size,
+			dead_filesystem_cache_size,
+			debug,
+		)
 
-		let path = (
+	}
 
-			path_ref.as_ref ().to_str (
-			).ok_or_else (
-				||
-
-				format! (
-					"Invalid path: {}",
-					path_ref.as_ref ().to_string_lossy ())
-
-			)
-
-		) ?.to_owned ();
+	fn new_impl (
+		path: & Path,
+		num_threads: usize,
+		uncompressed_memory_cache_size: usize,
+		compressed_memory_cache_size: usize,
+		live_filesystem_cache_size: usize,
+		dead_filesystem_cache_size: usize,
+		debug: bool,
+	) -> Result <StorageManager <Key>, String> {
 
 		// try and create filesystem cache path
 
 		fs::create_dir_all (
-			& path,
+			path,
 		).map_err (
 			|error|
 
 			format! (
 				"Error creating filesystem cache path: {}: {}",
-				& path,
+				path.to_string_lossy (),
 				error.description ())
 
 		) ?;
@@ -96,13 +144,13 @@ impl StorageManager {
 
 		let metadata =
 			fs::metadata (
-				& path,
+				path,
 			).map_err (
 				|_|
 
 				format! (
-					"Unable to access {}",
-					& path)
+					"Unable to access: {}",
+					path.to_string_lossy ())
 
 			) ?;
 
@@ -111,7 +159,7 @@ impl StorageManager {
 			return Err (
 				format! (
 					"Not a directory: {}",
-					& path));
+					path.to_string_lossy ()));
 
 		}
 
@@ -121,11 +169,9 @@ impl StorageManager {
 
 			data: Arc::new (
 				StorageManagerData {
-
-				path:
-					path,
-
-			}),
+					path: path.to_owned (),
+					debug: debug,
+				}),
 
 			state: Arc::new (
 				Mutex::new (
@@ -139,59 +185,75 @@ impl StorageManager {
 					LruCache::new (
 						compressed_memory_cache_size),
 
-				filesystem_items:
+				live_filesystem_items:
 					LruCache::new (
-						filesystem_cache_size),
+						live_filesystem_cache_size),
+
+				dead_filesystem_items:
+					LruCache::new (
+						dead_filesystem_cache_size),
+
+				uncompressed_memory_hits: 0,
+				compressed_memory_hits: 0,
+				live_filesystem_hits: 0,
+				dead_filesystem_hits: 0,
+				misses: 0,
 
 			})),
 
 			cpu_pool:
-				cpu_pool,
+				CpuPool::new (
+					num_threads),
 
 		})
 
 	}
 
 	pub fn insert (
-		& mut self,
-		key: String,
+		& self,
+		key: Key,
 		uncompressed_data: Arc <Vec <u8>>,
+		live: bool,
 	) -> Result <(), String> {
 
+		let entry_filename =
+			rand::thread_rng ()
+				.gen_ascii_chars ()
+				.take (16)
+				.collect ();
+
 		let entry_path =
-			format! (
-				"{}/{}",
-				self.data.path,
-				key);
+			self.data.path.join (
+				& entry_filename);
 
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
-		// store in memory cache
+		// store in uncompressed memory cache
 
 		if ! self_state.uncompressed_memory_items.contains_key (
 			& key,
 		) {
 
 			self_state.uncompressed_memory_items.insert (
-				key.deref ().to_owned (),
+				key.clone (),
 				uncompressed_data.clone ());
 
 		}
 
 		// check if it is compressed
 
-		let in_compressed_memory_cache =
-			self_state.compressed_memory_items.contains_key (
+		let in_live_filesystem_cache =
+			self_state.live_filesystem_items.contains_key (
 				& key);
 
-		let in_filesystem_cache =
-			self_state.filesystem_items.contains_key (
+		let in_dead_filesystem_cache =
+			self_state.live_filesystem_items.contains_key (
 				& key);
 
 		if (
-			! in_compressed_memory_cache
-			|| ! in_filesystem_cache
+			! in_live_filesystem_cache
+			&& ! in_dead_filesystem_cache
 		) {
 
 			// try and compress the data
@@ -220,10 +282,10 @@ impl StorageManager {
 
 			// store in compressed memory cache
 
-			if ! in_compressed_memory_cache {
+			if live {
 
 				self_state.compressed_memory_items.insert (
-					key.deref ().to_owned (),
+					key.clone (),
 					if compressed {
 
 						MemoryCacheItem::Compressed (
@@ -240,9 +302,9 @@ impl StorageManager {
 
 			}
 
-			// write out to the filesystem
+			// store in compressed filesystem cache
 
-			if ! in_filesystem_cache {
+			if ! in_live_filesystem_cache && ! in_dead_filesystem_cache {
 
 				let mut output =
 					File::create (
@@ -252,7 +314,7 @@ impl StorageManager {
 
 						panic! (
 							"Unable to create {}: {}",
-							& entry_path,
+							entry_path.to_string_lossy (),
 							error.description ())
 
 					);
@@ -264,27 +326,44 @@ impl StorageManager {
 
 					panic! (
 						"Error writing to {}: {}",
-						entry_path,
+						entry_path.to_string_lossy (),
 						error.description ())
 
 				);
 
-				// create and store the filesystem item in the index
+				// create and store the filesystem item
 
 				let filesystem_item =
 					FilesystemItem {
 
 					storage_manager: self.data.clone (),
-					key: key.deref ().to_owned (),
+					filename: entry_filename,
 					compressed: compressed,
 					stored_size: stored_data.len (),
 					uncompressed_size: uncompressed_data.len (),
 
 				};
 
-				self_state.filesystem_items.insert (
-					key.deref ().to_owned (),
-					Arc::new (filesystem_item));
+				if live {
+
+					if in_dead_filesystem_cache {
+
+						self_state.dead_filesystem_items.remove (
+							& key);
+
+					}
+
+					self_state.live_filesystem_items.insert (
+						key,
+						Arc::new (filesystem_item));
+
+				} else if ! in_live_filesystem_cache {
+
+					self_state.dead_filesystem_items.insert (
+						key,
+						Arc::new (filesystem_item));
+
+				}
 
 			}
 
@@ -298,7 +377,8 @@ impl StorageManager {
 
 	pub fn get (
 		& self,
-		key: & str,
+		debug: & Output,
+		key: & Key,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
 
 		let mut self_state =
@@ -307,34 +387,77 @@ impl StorageManager {
 		// try in uncompressed memory cache
 
 		match (
-
 			self_state.uncompressed_memory_items.get_mut (
-				key,
-			)
-
+				& key,
+			).map (|item| item.clone ())
 		) {
 
-			Some (item_data) =>
-				return Some (
+			Some (item_data) => {
+
+				// freshen caches
+
+				self_state.compressed_memory_items.get_mut (
+					& key);
+
+				let in_live =
+					self_state.live_filesystem_items.get_mut (
+						& key,
+					).is_some ();
+
+				if ! in_live {
+
+					let filesystem_item =
+						self_state.dead_filesystem_items.get_mut (
+							& key,
+						).unwrap ().clone ();
+
+					if self.data.debug {
+
+						output_message! (
+							debug,
+							"Promote to live: {}",
+							filesystem_item.filename);
+
+					}
+
+					self_state.dead_filesystem_items.remove (
+						& key);
+
+					self_state.live_filesystem_items.insert (
+						key.to_owned (),
+						filesystem_item);
+
+				}
+
+				// update hits
+
+				self_state.uncompressed_memory_hits += 1;
+
+				// return
+
+				Some (
 					futures::done (
-						Ok (item_data.clone ())
+						Ok (item_data)
 					).boxed (),
-				),
+				)
+
+			},
 
 			None =>
-				(),
-		};
+				self.get_compressed (
+					debug,
+					self_state.deref_mut (),
+					key),
 
-		self.get_compressed (
-			self_state.deref_mut (),
-			key)
+		}
 
 	}
 
 	fn get_compressed (
 		& self,
-		self_state: & mut StorageManagerState,
-		key: & str,
+		debug: & Output,
+		self_state: & mut StorageManagerState <Key>,
+		key: & Key,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
 
 		// try in compressed memory cache
@@ -342,17 +465,50 @@ impl StorageManager {
 		match (
 
 			self_state.compressed_memory_items.get_mut (
-				key,
-			)
+				& key,
+			).map (|item| item.clone ())
 
 		) {
 
 			Some (
-				& mut MemoryCacheItem::Compressed (
+				MemoryCacheItem::Compressed (
 					ref compressed_data,
 					uncompressed_size)
-			) =>
-				return Some ({
+			) => Some ({
+
+				// freshen caches
+
+				let in_live =
+					self_state.live_filesystem_items.get_mut (
+						& key,
+					).is_some ();
+
+				if ! in_live {
+
+					let filesystem_item =
+						self_state.dead_filesystem_items.get_mut (
+							& key,
+						).unwrap ().clone ();
+
+					if self.data.debug {
+
+						output_message! (
+							debug,
+							"Promote to live: {}",
+							filesystem_item.filename);
+
+					}
+
+					self_state.live_filesystem_items.insert (
+						key.to_owned (),
+						filesystem_item);
+
+					self_state.dead_filesystem_items.remove (
+						& key);
+
+				}
+
+				// decompress and return future
 
 				let self_clone =
 					self.clone ();
@@ -392,6 +548,12 @@ impl StorageManager {
 						key,
 						uncompressed_data.clone ());
 
+					// update hits
+
+					self_state.compressed_memory_hits += 1;
+
+					// return
+
 					Ok (uncompressed_data)
 
 				}).boxed ()
@@ -399,91 +561,206 @@ impl StorageManager {
 			}),
 
 			Some (
-				& mut MemoryCacheItem::Uncompressed (
+				MemoryCacheItem::Uncompressed (
 					ref uncompressed_data)
-			) =>
-				return Some (
-					futures::done (
-						Ok (uncompressed_data.clone ())
-					).boxed (),
-				),
+			) => Some ({
+
+				// freshen caches
+
+				let in_live =
+					self_state.live_filesystem_items.get_mut (
+						& key,
+					).is_some ();
+
+				if ! in_live {
+
+					let filesystem_item =
+						self_state.dead_filesystem_items.get_mut (
+							& key,
+						).unwrap ().clone ();
+
+					if self.data.debug {
+
+						output_message! (
+							debug,
+							"Promote to live: {}",
+							filesystem_item.filename);
+
+					}
+
+					self_state.live_filesystem_items.insert (
+						key.clone (),
+						filesystem_item);
+
+					self_state.dead_filesystem_items.remove (
+						& key);
+
+				}
+
+				// update hits
+
+				self_state.compressed_memory_hits += 1;
+
+				// return data directly
+
+				futures::done (
+					Ok (uncompressed_data.clone ())
+				).boxed ()
+
+			}),
 
 			None =>
-				(),
+				self.get_filesystem (
+					self_state,
+					key),
 
-		};
-
-		// try in compressed filesystem cache
-
-		self.get_filesystem (
-			self_state,
-			key)
+		}
 
 	}
 
 	fn get_filesystem (
 		& self,
-		self_state: & mut StorageManagerState,
-		key: & str,
+		self_state: & mut StorageManagerState <Key>,
+		key: & Key,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
 
-		match (
-
-			self_state.filesystem_items.get_mut (
+		let live_filesystem_item: Option <Arc <FilesystemItem>> =
+			self_state.live_filesystem_items.get_mut (
 				key,
-			)
+			).map (|filesystem_item|
+				filesystem_item.clone ()
+			);
 
-		) {
+		let is_live =
+			live_filesystem_item.is_some ();
 
-			Some (filesystem_item) => {
+		let dead_filesystem_item =
+			if is_live {
+				None
+			} else {
+				self_state.dead_filesystem_items.get_mut (
+					key,
+				).map (|filesystem_item|
+					filesystem_item.clone ()
+				)
+			};
 
-				let self_clone =
-					self.clone ();
+		if let Some (filesystem_item) =
+			live_filesystem_item.or (
+				dead_filesystem_item) {
 
-				let filesystem_item =
-					filesystem_item.clone ();
+			// move to live
 
-				let key =
-					key.to_owned ();
+			if ! is_live {
 
-				Some (self.cpu_pool.spawn_fn (
-					move || {
+				self_state.dead_filesystem_items.remove (
+					key);
 
-					let (uncompressed_data, compressed_data) =
-						filesystem_item.get () ?;
+				self_state.live_filesystem_items.insert (
+					key.to_owned (),
+					filesystem_item.clone ());
 
-					let mut self_state =
-						self_clone.state.lock ().unwrap ();
+			}
 
-					if compressed_data.is_some () {
+			// load and return
 
-						self_state.compressed_memory_items.insert (
-							key.clone (),
-							MemoryCacheItem::Compressed (
-								compressed_data.unwrap (),
-								uncompressed_data.len ()));
+			let key =
+				key.to_owned ();
 
-						self_state.uncompressed_memory_items.insert (
-							key,
-							uncompressed_data.clone ());
+			let self_clone =
+				self.clone ();
 
-					} else {
+			Some (self.cpu_pool.spawn_fn (
+				move || {
 
-						self_state.compressed_memory_items.insert (
-							key,
-							MemoryCacheItem::Uncompressed (
-								uncompressed_data.clone ()));
+				let (uncompressed_data, compressed_data) =
+					filesystem_item.get () ?;
 
-					}
+				// try and insert in memory cache
 
-					Ok (uncompressed_data)
+				let mut self_state =
+					self_clone.state.lock ().unwrap ();
 
-				}).boxed ())
+				if compressed_data.is_some () {
 
-			},
+					self_state.compressed_memory_items.insert (
+						key.clone (),
+						MemoryCacheItem::Compressed (
+							compressed_data.unwrap (),
+							uncompressed_data.len ()));
 
-			None =>
-				None,
+					self_state.uncompressed_memory_items.insert (
+						key,
+						uncompressed_data.clone ());
+
+				} else {
+
+					self_state.compressed_memory_items.insert (
+						key,
+						MemoryCacheItem::Uncompressed (
+							uncompressed_data.clone ()));
+
+				}
+
+				// update hits
+
+				if is_live {
+					self_state.live_filesystem_hits += 1;
+				} else {
+					self_state.dead_filesystem_hits += 1;
+				}
+
+				// return
+
+				Ok (uncompressed_data)
+
+			}).boxed ())
+
+		} else {
+
+			self_state.misses += 1;
+
+			None
+
+		}
+
+	}
+
+	pub fn status (
+		& self,
+	) -> StorageManagerStatus {
+
+		let self_state =
+			self.state.lock ().unwrap ();
+
+		StorageManagerStatus {
+
+			uncompressed_memory_items:
+				self_state.uncompressed_memory_items.len () as u64,
+
+			compressed_memory_items:
+				self_state.compressed_memory_items.len () as u64,
+
+			live_filesystem_items:
+				self_state.live_filesystem_items.len () as u64,
+
+			dead_filesystem_items:
+				self_state.dead_filesystem_items.len () as u64,
+
+			uncompressed_memory_hits:
+				self_state.uncompressed_memory_hits,
+
+			compressed_memory_hits:
+				self_state.compressed_memory_hits,
+
+			live_filesystem_hits:
+				self_state.live_filesystem_hits,
+
+			dead_filesystem_hits:
+				self_state.dead_filesystem_hits,
+
+			misses:
+				self_state.misses,
 
 		}
 
@@ -493,14 +770,13 @@ impl StorageManager {
 
 impl FilesystemItem {
 
+	#[ inline ]
 	fn path (
 		& self,
-	) -> String {
+	) -> PathBuf {
 
-		format! (
-			"{}/{}",
-			self.storage_manager.path,
-			self.key)
+		self.storage_manager.path.join (
+			& self.filename)
 
 	}
 
@@ -516,7 +792,7 @@ impl FilesystemItem {
 
 				format! (
 					"Error loading storage item {}: {}",
-					self.key,
+					self.filename,
 					error.description ())
 
 			) ?;
@@ -532,7 +808,7 @@ impl FilesystemItem {
 
 			format! (
 				"Error loading storage item {}: {}",
-				self.key,
+				self.filename,
 				error.description ())
 
 		) ?;
@@ -595,7 +871,7 @@ impl Drop for FilesystemItem {
 
 			panic! (
 				"Error removing storage item {}: {}",
-				self.key,
+				self.filename,
 				error.description ())
 
 		);

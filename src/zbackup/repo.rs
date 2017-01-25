@@ -19,8 +19,9 @@ use crypto::sha2::Sha256;
 
 use futures;
 use futures::BoxFuture;
-use futures::Complete;
 use futures::Future;
+use futures::future::Shared as SharedFuture;
+use futures::sync::oneshot;
 
 use futures_cpupool::CpuPool;
 
@@ -28,6 +29,7 @@ use lru_cache::LruCache;
 
 use num_cpus;
 
+use output;
 use output::Output;
 
 use protobuf::stream::CodedInputStream;
@@ -36,12 +38,26 @@ use rustc_serialize::hex::ToHex;
 
 use misc::*;
 
+use zbackup::bundle_loader::*;
 use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
 use zbackup::storage::*;
+
+/// This is the main struct which implements the ZBackup restore functionality.
+/// It is multi-threaded, using a cpu pool internally, and it is fully thread
+/// safe.
+
+#[ derive (Clone) ]
+pub struct Repository {
+	data: Arc <RepositoryData>,
+	state: Arc <Mutex <RepositoryState>>,
+	cpu_pool: CpuPool,
+	bundle_loader: BundleLoader,
+	storage_manager: StorageManager <ChunkId>,
+}
 
 type MasterIndex = HashMap <BundleId, MasterIndexEntry>;
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
@@ -76,34 +92,55 @@ struct RepositoryData {
 	encryption_key: Option <EncryptionKey>,
 }
 
-pub struct RepositoryJobStatus {
-	pub bundles_loading: Vec <BundleId>,
-	pub bundles_to_load: Vec <BundleId>,
+pub struct RepositoryStatus {
+	pub bundle_loader: BundleLoaderStatus,
+	pub storage_manager: StorageManagerStatus,
 }
 
-type ChunkWaiter = Complete <Result <ChunkData, String>>;
-type BundleWaiters = HashMap <ChunkId, Vec <ChunkWaiter>>;
+// bundle future
 
-type FutureChunkWaiter = Complete <BoxFuture <ChunkData, String>>;
-type FutureBundleWaiters = HashMap <ChunkId, Vec <FutureChunkWaiter>>;
+type BundleFutureResult =
+	Result <ChunkMap, String>;
+
+type BundleFutureSender =
+	oneshot::Receiver <BundleFutureResult>;
+
+type BundleFutureReceiver =
+	CloningSharedFuture <oneshot::Receiver <BundleFutureResult>>;
+
+// bundle double future
+
+type BundleDoubleFuture =
+	oneshot::Receiver <BundleFutureReceiver>;
+
+type BundleDoubleFutureSender =
+	oneshot::Sender <BundleDoubleFuture>;
+
+type BundleDoubleFutureReceiver =
+	CloningSharedFuture <BundleDoubleFuture>;
+
+type BundleDoubleFutureChannel = (
+	BundleDoubleFutureSender,
+	BundleDoubleFutureReceiver,
+);
+
+
+
+type ChunkFuture =
+	BoxFuture <ChunkData, String>;
+
+type ChunkDoubleFuture =
+	BoxFuture <ChunkFuture, String>;
+
+type ChunkShared =
+	SharedFuture <ChunkFuture>;
+
+type ChunkSharedShared =
+	SharedFuture <BoxFuture <ChunkShared, String>>;
 
 struct RepositoryState {
 	master_index: Option <MasterIndex>,
-	bundles_loading: HashMap <BundleId, BundleWaiters>,
-	bundles_to_load: HashMap <BundleId, FutureBundleWaiters>,
-	bundles_to_load_list: LinkedList <BundleId>,
-}
-
-/// This is the main struct which implements the ZBackup restore functionality.
-/// It is multi-threaded, using a cpu pool internally, and it is fully thread
-/// safe.
-
-#[ derive (Clone) ]
-pub struct Repository {
-	data: Arc <RepositoryData>,
-	state: Arc <Mutex <RepositoryState>>,
-	cpu_pool: CpuPool,
-	storage_manager: StorageManager,
+	bundles_needed: HashSet <BundleId>,
 }
 
 impl Repository {
@@ -144,6 +181,7 @@ impl Repository {
 	/// This will read the repositories info file, and decrypt the encryption
 	/// key using the password, if provided.
 
+	#[ inline ]
 	pub fn open <
 		RepositoryPath: AsRef <Path>,
 		PasswordFilePath: AsRef <Path>,
@@ -241,17 +279,27 @@ impl Repository {
 
 		let cpu_pool =
 			CpuPool::new (
-				repository_config.max_threads + 1);
+				repository_config.max_threads);
+
+		// create bundle loader
+
+		let bundle_loader =
+			BundleLoader::new (
+				repository_path,
+				encryption_key,
+				repository_config.max_threads);
 
 		// create storage manager
 
 		let storage_manager =
 			StorageManager::new (
 				repository_config.filesystem_cache_path.clone (),
-				cpu_pool.clone (),
+				repository_config.max_threads,
 				repository_config.max_uncompressed_memory_cache_entries,
 				repository_config.max_compressed_memory_cache_entries,
-				repository_config.max_compressed_filesystem_cache_entries,
+				repository_config.max_compressed_filesystem_cache_entries * 7/8,
+				repository_config.max_compressed_filesystem_cache_entries * 1/8,
+				true,
 			) ?;
 
 		// create data
@@ -271,33 +319,19 @@ impl Repository {
 		// create state
 
 		let repository_state =
-			Arc::new (
-				Mutex::new (
-					RepositoryState {
-
-			master_index:
-				None,
-
-			bundles_loading:
-				HashMap::new (),
-
-			bundles_to_load:
-				HashMap::new (),
-
-			bundles_to_load_list:
-				LinkedList::new (),
-
-		}));
+			Arc::new (Mutex::new (RepositoryState {
+				master_index: None,
+				bundles_needed: HashSet::new (),
+			}));
 
 		// return
 
 		Ok (Repository {
-
 			data: repository_data,
 			state: repository_state,
 			cpu_pool: cpu_pool,
+			bundle_loader: bundle_loader,
 			storage_manager: storage_manager,
-
 		})
 
 	}
@@ -821,6 +855,7 @@ impl Repository {
 
 	fn follow_instruction_async_async (
 		& self,
+		debug: & Output,
 		backup_instruction: & proto::BackupInstruction,
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
@@ -834,7 +869,8 @@ impl Repository {
 			let backup_instruction_bytes_to_emit =
 				backup_instruction.get_bytes_to_emit ().to_vec ();
 
-			self.get_chunk_async_async (
+			self.get_chunk_async_async_debug (
+				debug,
 				chunk_id,
 			).map (
 				move |chunk_data_future|
@@ -859,7 +895,8 @@ impl Repository {
 				to_array_24 (
 					backup_instruction.get_chunk_to_emit ());
 
-			self.get_chunk_async_async (
+			self.get_chunk_async_async_debug (
+				debug,
 				chunk_id,
 			)
 
@@ -887,6 +924,26 @@ impl Repository {
 	#[ doc (hidden) ]
 	pub fn follow_instructions (
 		& self,
+		input: & mut Read,
+		target: & mut Write,
+		digest: & mut Digest,
+		progress: & Fn (u64),
+	) -> Result <(), String> {
+
+		self.follow_instructions_debug (
+			& output::null (),
+			input,
+			target,
+			digest,
+			progress,
+		)
+
+	}
+
+	#[ doc (hidden) ]
+	pub fn follow_instructions_debug (
+		& self,
+		debug: & Output,
 		input: & mut Read,
 		target: & mut Write,
 		digest: & mut Digest,
@@ -943,6 +1000,7 @@ impl Repository {
 					future_chunk_job = Some (
 
 						self.follow_instruction_async_async (
+							debug,
 							& backup_instruction,
 						).map (
 							|future_chunk_data|
@@ -1093,7 +1151,22 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> Result <ChunkData, String> {
 
-		self.get_chunk_async (
+		self.get_chunk_debug (
+			& output::null (),
+			chunk_id,
+		)
+
+	}
+
+	#[ doc (hidden) ]
+	pub fn get_chunk_debug (
+		& self,
+		debug: & Output,
+		chunk_id: ChunkId,
+	) -> Result <ChunkData, String> {
+
+		self.get_chunk_async_debug (
+			debug,
 			chunk_id,
 		).wait ()
 
@@ -1108,7 +1181,22 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> BoxFuture <ChunkData, String> {
 
-		self.get_chunk_async_async (
+		self.get_chunk_async_debug (
+			& output::null (),
+			chunk_id,
+		)
+
+	}
+
+	#[ doc (hidden) ]
+	pub fn get_chunk_async_debug (
+		& self,
+		debug: & Output,
+		chunk_id: ChunkId,
+	) -> BoxFuture <ChunkData, String> {
+
+		self.get_chunk_async_async_debug (
+			debug,
 			chunk_id,
 		).and_then (
 			|future|
@@ -1137,6 +1225,20 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
+		self.get_chunk_async_async_debug (
+			& output::null (),
+			chunk_id,
+		)
+
+	}
+
+	#[ doc (hidden) ]
+	pub fn get_chunk_async_async_debug (
+		& self,
+		debug: & Output,
+		chunk_id: ChunkId,
+	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
+
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
@@ -1149,9 +1251,13 @@ impl Repository {
 
 		// lookup via storage manager
 
+		let debug_clone =
+			debug.clone ();
+
 		if let Some (chunk_data_future) =
 			self.storage_manager.get (
-				& chunk_id.to_hex (),
+				debug,
+				& chunk_id,
 			) {
 
 			let self_clone =
@@ -1166,6 +1272,7 @@ impl Repository {
 					self_clone.state.lock ().unwrap ();
 
 				self_clone.load_chunk_async_async (
+					& debug_clone,
 					self_state.deref_mut (),
 					chunk_id)
 
@@ -1176,6 +1283,7 @@ impl Repository {
 		// load bundle if chunk is not available
 
 		self.load_chunk_async_async (
+			debug,
 			self_state.deref_mut (),
 			chunk_id)
 
@@ -1183,6 +1291,7 @@ impl Repository {
 
 	fn load_chunk_async_async (
 		& self,
+		debug: & Output,
 		self_state: & mut RepositoryState,
 		chunk_id: ChunkId,
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
@@ -1212,391 +1321,85 @@ impl Repository {
 
 		};
 
-		self.load_chunk_async_async_real (
+		self.load_chunk_async_async_impl (
+			debug,
 			self_state,
 			chunk_id,
 			bundle_id)
 
 	}
 
-	fn load_chunk_async_async_real (
+	fn load_chunk_async_async_impl (
 		& self,
+		_debug: & Output,
 		self_state: & mut RepositoryState,
 		chunk_id: ChunkId,
 		bundle_id: BundleId,
-	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
+	) -> ChunkDoubleFuture {
+
+		self_state.bundles_needed.insert (
+			bundle_id);
 
 		let self_clone =
 			self.clone ();
 
-		// if it's already being loaded then we can join in
+		self.bundle_loader.load_bundle_async_async (
+			& output::null (),
+			bundle_id,
+		).map (
+			move |chunk_map_future: BoxFuture <ChunkMap, String>|
 
-		if self_state.bundles_loading.contains_key (
-			& bundle_id) {
+			chunk_map_future.then (
+				move |chunk_map_result: Result <ChunkMap, String>| {
 
-			return futures::done (
-				Ok (
+				chunk_map_result.map (
+					move |chunk_map| {
 
-				self_clone.join_load_chunk_async (
-					& mut self_state.bundles_loading.get_mut (
-						& bundle_id,
-					).unwrap (),
-					chunk_id.clone ())
+					let mut self_state =
+						self_clone.state.lock ().unwrap ();
 
+					if self_state.bundles_needed.remove (
+						& bundle_id) {
+
+						for (chunk_id, chunk_data)
+						in chunk_map.iter () {
+
+							self_clone.storage_manager.insert (
+								* chunk_id,
+								chunk_data.clone (),
+								false,
+							) ?;
+
+						}
+
+					}
+
+					if let Some (chunk_data) =
+						chunk_map.get (& chunk_id) {
+
+						self_clone.storage_manager.insert (
+							chunk_id,
+							chunk_data.clone (),
+							true,
+						) ?;
+
+						Ok (chunk_data.clone ())
+
+					} else {
+
+						Err (format! (
+							"Chunk not found: {}",
+							chunk_id.to_hex ()))
+
+					}
+
+				}).and_then (
+					|result| result
 				)
 
-			).boxed ();
-
-		}
-
-		// start a load if there is a slot
-
-		if self_state.bundles_loading.len ()
-			< self.data.config.max_threads {
-
-			return futures::done (Ok (
-
-				self_clone.start_load_chunk_async (
-					self_state,
-					chunk_id.clone (),
-					bundle_id,
-				)
-
-			)).boxed ();
-
-		}
-
-		// add to future bundle loaders
-
-		if ! self_state.bundles_to_load.contains_key (
-			& bundle_id) {
-
-			self_state.bundles_to_load.insert (
-				bundle_id.clone (),
-				HashMap::new ());
-
-			self_state.bundles_to_load_list.push_back (
-				bundle_id.clone ());
-
-		}
-
-		self.join_future_load_chunk_async (
-			self_state.bundles_to_load.get_mut (
-				& bundle_id,
-			).unwrap (),
-			chunk_id)
-
-	}
-
-	fn join_load_chunk_async (
-		& self,
-		bundle_waiters: & mut BundleWaiters,
-		chunk_id: ChunkId,
-	) -> BoxFuture <ChunkData, String> {
-
-		let (complete, future) =
-			futures::oneshot ();
-
-		if (
-
-			! bundle_waiters.contains_key (
-				& chunk_id)
-
-		) {
-
-			bundle_waiters.insert (
-				chunk_id.clone (),
-				Vec::new ());
-
-		}
-
-		bundle_waiters.get_mut (
-			& chunk_id,
-		).unwrap ().push (
-			complete,
-		);
-
-		future.map_err (
-			|_|
-
-			"Cancelled".to_owned ()
-
-		).and_then (
-			|chunk_data_result| {
-
-			chunk_data_result
-
-		}).boxed ()
-
-	}
-
-	fn join_future_load_chunk_async (
-		& self,
-		bundle_waiters: & mut FutureBundleWaiters,
-		chunk_id: ChunkId,
-	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
-
-		// insert chunk id if it does not already exist
-
-		if (
-
-			! bundle_waiters.contains_key (
-				& chunk_id)
-
-		) {
-
-			bundle_waiters.insert (
-				chunk_id.clone (),
-				Vec::new ());
-
-		}
-
-		// add oneshot to list
-
-		let (complete, future) =
-			futures::oneshot ();
-
-		bundle_waiters.get_mut (
-			& chunk_id,
-		).unwrap ().push (
-			complete,
-		);
-
-		// return appropriately typed future
-
-		future.and_then (
-			|next_future|
-
-			Ok (next_future)
-
-		).map_err (
-			|_|
-
-			"Cancelled".to_string ()
+			}).boxed ()
 
 		).boxed ()
-
-	}
-
-	fn start_load_chunk_async (
-		& self,
-		self_state: & mut RepositoryState,
-		chunk_id: ChunkId,
-		bundle_id: BundleId,
-	) -> BoxFuture <ChunkData, String> {
-
-		let bundle_path =
-			self.bundle_path (
-				bundle_id);
-
-		self_state.bundles_loading.insert (
-			bundle_id.clone (),
-			HashMap::new ());
-
-		let mut self_clone =
-			self.clone ();
-
-		self.cpu_pool.spawn_fn (
-			move || {
-
-			let chunk_map_result = (
-
-				read_bundle (
-					bundle_path,
-					self_clone.data.encryption_key)
-
-			).map_err (
-				|original_error| {
-
-				format! (
-					"Error reading bundle {}: {}",
-					bundle_id.to_hex (),
-					original_error)
-
-			}).map (
-				move |bundle_data| {
-
-				let mut chunk_map =
-					HashMap::new ();
-
-				for (found_chunk_id, found_chunk_data) in bundle_data {
-
-					chunk_map.insert (
-						found_chunk_id,
-						Arc::new (
-							found_chunk_data));
-
-				}
-
-				Arc::new (chunk_map)
-
-			});
-
-			// store chunk data in cache
-
-			let mut self_state =
-				self_clone.state.lock ().unwrap ();
-
-			let chunk_map =
-				chunk_map_result ?;
-
-			for (chunk_id, chunk_data)
-			in chunk_map.iter () {
-
-				self_clone.storage_manager.insert (
-					chunk_id.to_hex (),
-					chunk_data.clone (),
-				) ?;
-
-			}
-
-			// notify other processes waiting for the same bundle
-
-			let bundle_waiters =
-				self_state.bundles_loading.remove (
-					& bundle_id,
-				).unwrap ();
-
-			for (chunk_id, chunk_waiters)
-			in bundle_waiters {
-
-				let chunk_data_result = (
-
-					chunk_map.get (
-						& chunk_id,
-					).ok_or_else (
-						||
-
-						format! (
-							"Expected to find chunk {} in bundle {}",
-							chunk_id.to_hex (),
-							bundle_id.to_hex ())
-
-					)
-
-				);
-
-				for chunk_waiter in chunk_waiters {
-
-					chunk_waiter.complete (
-						chunk_data_result.clone (
-						).map (
-							|chunk_data|
-							chunk_data.clone ()
-						),
-					);
-
-				}
-
-			}
-
-			// start loading next chunks
-
-			self_clone.start_loading_next_chunks (
-				self_state.deref_mut ());
-
-			// return
-
-			chunk_map.get (
-				& chunk_id,
-			).ok_or_else (
-				||
-
-				format! (
-					"Expected to find chunk {} in bundle {}",
-					chunk_id.to_hex (),
-					bundle_id.to_hex ())
-
-			).map (
-				|chunk_data|
-				chunk_data.clone ()
-			)
-
-		}).boxed ()
-
-	}
-
-	fn start_loading_next_chunks (
-		& self,
-		self_state: & mut RepositoryState,
-	) {
-
-		let bundle_id = match (
-			self_state.bundles_to_load_list.pop_front ()
-		) {
-
-			Some (bundle_id) =>
-				bundle_id,
-
-			None =>
-				return,
-
-		};
-
-		let mut bundle_waiters =
-			self_state.bundles_to_load.remove (
-				& bundle_id,
-			).unwrap ();
-
-		// first waiter of first chunk starts things off
-
-		let first_chunk_id =
-			bundle_waiters.keys ().next ().unwrap ().clone ();
-
-		let first_waiters =
-			bundle_waiters.remove (
-				& first_chunk_id,
-			).unwrap ();
-
-		let mut first_waiters_iterator =
-			first_waiters.into_iter ();
-
-		first_waiters_iterator.next ().unwrap ().complete (
-
-			self.start_load_chunk_async (
-				self_state,
-				first_chunk_id.clone (),
-				bundle_id,
-			)
-
-		);
-
-		// the rest join in
-
-		let new_bundle_waiters =
-			self_state.bundles_loading.get_mut (
-				& bundle_id,
-			).unwrap ();
-
-		for first_waiter in first_waiters_iterator {
-
-			first_waiter.complete (
-
-				self.join_load_chunk_async (
-					new_bundle_waiters,
-					first_chunk_id.clone (),
-				)
-
-			);
-
-		}
-
-		for (chunk_id, waiters) in bundle_waiters {
-
-			for waiter in waiters {
-
-				waiter.complete (
-
-					self.join_load_chunk_async (
-						new_bundle_waiters,
-						chunk_id.clone (),
-					)
-
-				);
-
-			}
-
-		}
 
 	}
 
@@ -1692,7 +1495,7 @@ impl Repository {
 	) {
 
 		output.status (
-			"Closing repository");
+			"Closing repository ...");
 
 		drop (self);
 
@@ -1703,6 +1506,7 @@ impl Repository {
 	/// This is an accessor method to access the `RepositoryConfig` struct which
 	/// was used to construct this `Repository`.
 
+	#[ inline ]
 	pub fn config (
 		& self,
 	) -> & RepositoryConfig {
@@ -1711,6 +1515,7 @@ impl Repository {
 
 	/// This is an accessor method to access the repository's `path`
 
+	#[ inline ]
 	pub fn path (
 		& self,
 	) -> & Path {
@@ -1720,6 +1525,7 @@ impl Repository {
 	/// This is an accessor method to access the `StorageInfo` protobug struct
 	/// which was loaded from the repository's index file.
 
+	#[ inline ]
 	pub fn storage_info (
 		& self,
 	) -> & proto::StorageInfo {
@@ -1730,6 +1536,7 @@ impl Repository {
 	/// was stored in the repository's info file and decrypted using the
 	/// provided password.
 
+	#[ inline ]
 	pub fn encryption_key (
 		& self,
 	) -> Option <[u8; KEY_SIZE]> {
@@ -1763,28 +1570,21 @@ impl Repository {
 
 	}
 
-	pub fn job_status (
+	pub fn status (
 		& self,
-	) -> RepositoryJobStatus {
+	) -> RepositoryStatus {
 
-		let self_state =
-			self.state.lock ().unwrap ();
+		RepositoryStatus {
 
-		RepositoryJobStatus {
+			bundle_loader:
+				self.bundle_loader.status (),
 
-			bundles_loading:
-				self_state.bundles_loading.keys ()
-					.map (|& bundle_id| bundle_id)
-					.collect (),
+			storage_manager:
+				self.storage_manager.status (),
 
-			bundles_to_load:
-				self_state.bundles_to_load.keys ()
-					.map (|& bundle_id| bundle_id)
-					.collect (),
 		}
 
 	}
 
 }
 
-// ex: noet ts=4 filetype=rust

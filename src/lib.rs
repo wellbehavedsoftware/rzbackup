@@ -18,6 +18,9 @@
 #[ macro_use ]
 extern crate lazy_static;
 
+#[ macro_use ]
+extern crate output;
+
 extern crate adler32;
 extern crate byteorder;
 extern crate clap;
@@ -29,7 +32,6 @@ extern crate libc;
 extern crate lru_cache;
 extern crate minilzo;
 extern crate num_cpus;
-extern crate output;
 extern crate protobuf;
 extern crate rand;
 extern crate regex;

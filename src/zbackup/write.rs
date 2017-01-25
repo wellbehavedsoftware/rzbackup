@@ -128,8 +128,6 @@ pub fn write_bundle <
 		for & (_, ref chunk_data)
 		in chunk_ids_and_data.iter () {
 
-//println! ("ABOUT TO WRITE {}", chunk_data.len ());
-
 			lzma_writer.write_all (
 				& chunk_data,
 			).map_err (

@@ -45,19 +45,30 @@ pub struct CryptoReader {
 
 impl CryptoReader {
 
+	#[ inline ]
 	pub fn open <PathRef: AsRef <Path>> (
 		path: PathRef,
 		encryption_key: [u8; KEY_SIZE],
 	) -> io::Result <CryptoReader> {
 
+		Self::open_impl (
+			path.as_ref (),
+			encryption_key,
+		)
+
+	}
+
+	pub fn open_impl (
+		path: & Path,
+		encryption_key: [u8; KEY_SIZE],
+	) -> io::Result <CryptoReader> {
+
 		// open file
 
-		let file = (
-
+		let file =
 			File::open (
-				path)
-
-		) ?;
+				path,
+			) ?;
 
 		// setup decryptor
 

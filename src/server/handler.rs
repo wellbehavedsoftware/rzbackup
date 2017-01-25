@@ -225,58 +225,176 @@ fn handle_status (
 		BufWriter::new (
 			stream);
 
-	let job_status =
-		repository.job_status ();
+	let status =
+		repository.status ();
 
-	io_result (
-		write! (
+	io_result (write! (
+		writer,
+		"OK\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"storage-manager:\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  uncompressed-memory-items: {}\n",
+		status.storage_manager.uncompressed_memory_items,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  compressed-memory-items: {}\n",
+		status.storage_manager.compressed_memory_items,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  live-filesystem-items: {}\n",
+		status.storage_manager.live_filesystem_items,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  dead-filesystem-items: {}\n",
+		status.storage_manager.dead_filesystem_items,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  uncompressed-memory-hits: {}\n",
+		status.storage_manager.uncompressed_memory_hits,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  compressed-memory-hits: {}\n",
+		status.storage_manager.compressed_memory_hits,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  live-filesystem-hits: {}\n",
+		status.storage_manager.live_filesystem_hits,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  dead-filesystem-hits: {}\n",
+		status.storage_manager.dead_filesystem_hits,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"  misses: {}\n",
+		status.storage_manager.misses,
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"bundle-loader:\n",
+	)) ?;
+
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	if status.bundle_loader.loading_later.is_empty () {
+
+		io_result (write! (
 			writer,
-			"OK\n"),
-	) ?;
+			"  loading-now: []\n",
+		)) ?;
 
-	io_result (
-		write! (
+	} else {
+
+		io_result (write! (
 			writer,
-			"{{ \"bundles-loading\": ["),
-	) ?;
+			"  loading-now:\n",
+		)) ?;
 
-	for (index, bundle_id)
-	in job_status.bundles_loading.iter ().enumerate () {
+		io_result (write! (
+			writer,
+			"\n",
+		)) ?;
 
-		io_result (
-			write! (
+		for bundle_id
+		in status.bundle_loader.loading_now.iter () {
+
+			io_result (write! (
 				writer,
-				"{}\"{}\"",
-				if index == 0 { " " } else { ", " },
-				bundle_id.to_hex ()),
-		) ?;
+				"    - \"{}\"\n",
+				bundle_id.to_hex (),
+			)) ?;
+
+		}
 
 	}
 
-	io_result (
-		write! (
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
+
+	if status.bundle_loader.loading_later.is_empty () {
+
+		io_result (write! (
 			writer,
-			" ], \"bundles-to-load\": ["),
-	) ?;
+			"  loading-later: []\n",
+		)) ?;
 
-	for (index, bundle_id)
-	in job_status.bundles_to_load.iter ().enumerate () {
+	} else {
 
-		io_result (
-			write! (
+		io_result (write! (
+			writer,
+			"  loading-later:\n",
+		)) ?;
+
+		io_result (write! (
+			writer,
+			"\n",
+		)) ?;
+
+		for bundle_id
+		in status.bundle_loader.loading_later.iter () {
+
+			io_result (write! (
 				writer,
-				"{}\"{}\"",
-				if index == 0 { " " } else { ", " },
-				bundle_id.to_hex ()),
-		) ?;
+				"    - \"{}\"\n",
+				bundle_id.to_hex (),
+			)) ?;
+
+		}
 
 	}
 
-	io_result (
-		write! (
-			writer,
-			" ] }}\n"),
-	) ?;
+	io_result (write! (
+		writer,
+		"\n",
+	)) ?;
 
 	Ok (())
 

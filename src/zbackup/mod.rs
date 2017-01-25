@@ -1,3 +1,4 @@
+pub mod bundle_loader;
 pub mod crypto;
 pub mod data;
 pub mod file;

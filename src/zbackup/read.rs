@@ -25,11 +25,20 @@ use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::proto;
 
+#[ inline ]
 pub fn read_storage_info <PathRef: AsRef <Path>> (
 	info_path: PathRef,
 ) -> Result <proto::StorageInfo, String> {
 
-	let info_path = info_path.as_ref ();
+	read_storage_info_impl (
+		info_path.as_ref (),
+	)
+
+}
+
+pub fn read_storage_info_impl (
+	info_path: & Path,
+) -> Result <proto::StorageInfo, String> {
 
 	let storage_info: proto::StorageInfo;
 

@@ -13,7 +13,7 @@ dependencies = [
  "lru-cache 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "minilzo 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "output 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "protobuf 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "output"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "lazy_static 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -351,7 +351,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum minilzo 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7b4d5a2c254366545276c5a9203fb2e3a699df6ea15a625bea1df367270a3a80"
 "checksum minilzo-sys 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ce123edaa554212f9aef7466ae6805c59ce71edd79ead0c2aa8e828e444de9e5"
 "checksum num_cpus 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a225d1e2717567599c24f88e49f00856c6e825a12125181ee42c4257e3688d39"
-"checksum output 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fa48553a7b3daf627fb657b93589c7ec94ec2048dc8c1445eba00f6d21676772"
+"checksum output 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "70c9d10737ce3318546e00c482fa5c2b15b4f44ac4d571915be5c8b25542fc78"
 "checksum protobuf 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "229112a9213bf62a59f0702871a6e4872fe928161fc7a08f17cdd6c8c7988bf7"
 "checksum rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "022e0636ec2519ddae48154b028864bdce4eaf7d35226ab8e65c611be97b189d"
 "checksum redox_syscall 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)" = "8dd35cc9a8bdec562c757e3d43c1526b5c6d2653e23e2315065bc25556550753"

@@ -15,6 +15,7 @@ use zbackup::proto;
 /// called automatically when constructing a `Repository`, but it is made public
 /// because it may be useful in some cases.
 
+#[ inline ]
 pub fn decrypt_key <
 	PasswordFilePath: AsRef <Path>,
 > (
@@ -22,8 +23,17 @@ pub fn decrypt_key <
 	encryption_key: & proto::EncryptionKeyInfo,
 ) -> Result <Option <[u8; KEY_SIZE]>, String> {
 
-	let password_file_path =
-		password_file_path.as_ref ();
+	decrypt_key_impl (
+		password_file_path.as_ref (),
+		encryption_key,
+	)
+
+}
+
+fn decrypt_key_impl (
+	password_file_path: & Path,
+	encryption_key: & proto::EncryptionKeyInfo,
+) -> Result <Option <[u8; KEY_SIZE]>, String> {
 
 	// read password from file
 

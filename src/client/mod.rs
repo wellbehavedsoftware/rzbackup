@@ -4,6 +4,7 @@ mod client;
 mod clientexit;
 mod clientreindex;
 mod clientrestore;
+mod clientstatus;
 
 // import project dependencies
 
@@ -15,6 +16,7 @@ pub use self::client::*;
 pub use self::clientexit::*;
 pub use self::clientreindex::*;
 pub use self::clientrestore::*;
+pub use self::clientstatus::*;
 
 // commands
 
@@ -29,6 +31,7 @@ pub fn client_command (
 				client_exit_command (),
 				client_reindex_command (),
 				client_restore_command (),
+				client_status_command (),
 			],
 		)
 	)
