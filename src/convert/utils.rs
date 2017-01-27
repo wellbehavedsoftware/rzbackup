@@ -363,19 +363,28 @@ pub fn scan_bundle_files_with_sizes <
 }
 
 pub fn flush_index_entries (
+	output: & Output,
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
-	index_entries_buffer: & mut Vec <IndexEntry>,
+	temp_files: & TempFileManager,
+	index_entries_buffer: & Vec <IndexEntry>,
 ) -> Result <IndexId, String> {
 
 	let index_id =
-		write_index_auto (
-			repository,
-			temp_files,
-			& index_entries_buffer,
-		) ?;
+		index_id_generate ();
 
-	index_entries_buffer.clear ();
+	let output_job =
+		output_job_start! (
+			output,
+			"Writing index {}",
+			index_id.to_hex ());
+
+	write_index_auto (
+		repository,
+		temp_files,
+		& index_entries_buffer,
+	) ?;
+
+	output_job.remove ();
 
 	Ok (index_id)
 

@@ -7,11 +7,17 @@ use adler32::RollingAdler32;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
 
+use output;
+use output::Output;
+use output::OutputLog;
+
 use protobuf;
 use protobuf::stream::CodedOutputStream;
 
 use rand;
 use rand::Rng;
+
+use rustc_serialize::hex::ToHex;
 
 use ::Repository;
 use ::TempFileManager;
@@ -185,7 +191,7 @@ pub fn write_bundle <
 
 pub fn write_index_auto (
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
+	temp_files: & TempFileManager,
 	index_entries: & [IndexEntry],
 ) -> Result <IndexId, String> {
 
@@ -213,7 +219,70 @@ pub fn write_index_auto (
 
 }
 
+pub fn write_index_auto_output (
+	output: & Output,
+	repository: & Repository,
+	temp_files: & TempFileManager,
+	index_id: IndexId,
+	index_entries: & [IndexEntry],
+) -> Result <IndexId, String> {
+
+	let output_job =
+		output_job_start! (
+			output,
+			"Writing index {}",
+			index_id.to_hex ());
+
+	let index_path =
+		repository.index_path (
+			index_id);
+
+	let index_file =
+		Box::new (
+			temp_files.create (
+				index_path,
+			) ?
+		);
+
+	write_index_output_job (
+		& output_job,
+		index_file,
+		repository.encryption_key (),
+		& index_entries,
+	) ?;
+
+	output_job.remove ();
+
+	Ok (index_id)
+
+}
+
+#[ inline ]
 pub fn write_index (
+	target: Box <Write>,
+	key: Option <[u8; KEY_SIZE]>,
+	index_entries: & [IndexEntry],
+) -> Result <(), String> {
+
+	let output =
+		output::null ();
+
+	let output_job =
+		output_job_start! (
+			output,
+			"");
+
+	write_index_output_job (
+		& output_job,
+		target,
+		key,
+		index_entries,
+	)
+
+}
+
+pub fn write_index_output_job (
+	output_job: & OutputLog,
 	target: Box <Write>,
 	key: Option <[u8; KEY_SIZE]>,
 	index_entries: & [IndexEntry],
@@ -247,15 +316,20 @@ pub fn write_index (
 
 		// write index entries
 
-		let mut index = 0;
+		let mut entries_count: u64 = 0;
+		let entries_total = index_entries.len () as u64;
 
 		for & (ref index_bundle_header, ref index_bundle_info)
 		in index_entries.iter () {
 
+			output_job.progress (
+				entries_count,
+				entries_total);
+
 			write_message (
 				|| format! (
 					"index bundle header {}",
-					index),
+					entries_count),
 				& mut coded_output_stream,
 				index_bundle_header,
 			) ?;
@@ -263,12 +337,12 @@ pub fn write_index (
 			write_message (
 				|| format! (
 					"index bundle info {}",
-					index),
+					entries_count),
 				& mut coded_output_stream,
 				index_bundle_info,
 			) ?;
 
-			index += 1;
+			entries_count += 1;
 
 		}
 

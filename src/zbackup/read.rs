@@ -293,7 +293,7 @@ pub fn read_bundle_info <PathRef: AsRef <Path>> (
 	let mut source =
 		io_result_with_prefix (
 			|| format! (
-				"Error reading {}: ",
+				"Error opening {}: ",
 				bundle_path.to_string_lossy ()),
 			open_file_with_crypto_and_adler (
 				bundle_path,
@@ -584,7 +584,7 @@ pub fn read_message <
 				"Error preparing to read {}: ",
 				name_function ()),
 			coded_input_stream.push_limit (
-				message_length),
+				message_length as u64),
 		) ?;
 
 	let message =

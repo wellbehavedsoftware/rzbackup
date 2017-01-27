@@ -4,6 +4,8 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -18,7 +20,12 @@ use rand::Rng;
 
 use ::misc::*;
 
+#[ derive (Clone) ]
 pub struct TempFileManager {
+	state: Arc <Mutex <TempFileManagerState>>,
+}
+
+struct TempFileManagerState {
 	lock_fd: libc::c_int,
 	temp_dir_path: PathBuf,
 	temp_files: Vec <(String, PathBuf)>,
@@ -57,8 +64,6 @@ impl TempFileManager {
 		};
 
 		if lock_fd < 0 {
-
-			output.clear_status ();
 
 			return Err (
 				format! (
@@ -124,10 +129,14 @@ impl TempFileManager {
 		}
 
 		Ok (TempFileManager {
-			lock_fd: lock_fd,
-			temp_dir_path: temp_dir_path,
-			temp_files: Vec::new (),
-			delete_files: Vec::new (),
+			state: Arc::new (Mutex::new (
+				TempFileManagerState {
+					lock_fd: lock_fd,
+					temp_dir_path: temp_dir_path,
+					temp_files: Vec::new (),
+					delete_files: Vec::new (),
+				},
+			)),
 		})
 
 	}
@@ -138,8 +147,10 @@ impl TempFileManager {
 		lock_fd: libc::c_int,
 	) -> Result <(), String> {
 
-		output.status (
-			"Waiting for repository lock ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Waiting for repository lock");
 
 		// lock with flock
 
@@ -162,8 +173,6 @@ impl TempFileManager {
 					continue;
 
 				}
-
-				output.clear_status ();
 
 				return Err (
 					format! (
@@ -198,8 +207,6 @@ impl TempFileManager {
 
 		if fcntl_result != 0 {
 
-			output.clear_status ();
-
 			return Err (
 				format! (
 					"{}",
@@ -209,7 +216,7 @@ impl TempFileManager {
 
 		// return
 
-		output.clear_status ();
+		output_job.remove ();
 
 		Ok (())
 
@@ -220,8 +227,10 @@ impl TempFileManager {
 		lock_fd: libc::c_int,
 	) -> Result <(), String> {
 
-		output.status (
-			"Waiting for repository lock ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Waiting for repository lock");
 
 		// lock with flock
 
@@ -233,8 +242,6 @@ impl TempFileManager {
 		};
 
 		if flock_result != 0 {
-
-			output.clear_status ();
 
 			return Err (
 				format! (
@@ -265,8 +272,6 @@ impl TempFileManager {
 
 		if fcntl_result != 0 {
 
-			output.clear_status ();
-
 			return Err (
 				format! (
 					"{}",
@@ -276,16 +281,19 @@ impl TempFileManager {
 
 		// return
 
-		output.clear_status ();
+		output_job.remove ();
 
 		Ok (())
 
 	}
 
 	pub fn create (
-		& mut self,
+		& self,
 		target_path: PathBuf,
 	) -> Result <File, String> {
+
+		let mut self_state =
+			self.state.lock ().unwrap ();
 
 		let temp_file_name: String =
 			rand::thread_rng ()
@@ -294,7 +302,7 @@ impl TempFileManager {
 				.collect ();
 
 		let temp_file_path =
-			self.temp_dir_path.join (
+			self_state.temp_dir_path.join (
 				& temp_file_name);
 
 		let temp_file =
@@ -306,7 +314,7 @@ impl TempFileManager {
 					& temp_file_path),
 			) ?;
 
-		self.temp_files.push (
+		self_state.temp_files.push (
 			(
 				temp_file_name,
 				target_path,
@@ -318,23 +326,29 @@ impl TempFileManager {
 	}
 
 	pub fn delete (
-		& mut self,
+		& self,
 		delete_path: PathBuf,
 	) {
 
-		self.delete_files.push (
+		let mut self_state =
+			self.state.lock ().unwrap ();
+
+		self_state.delete_files.push (
 			delete_path)
 
 	}
 
 	pub fn commit (
-		& mut self
+		& self
 	) -> Result <(), String> {
+
+		let mut self_state =
+			self.state.lock ().unwrap ();
 
 		// sync all temp files
 
 		for & (ref temp_file_name, _)
-		in self.temp_files.iter () {
+		in self_state.temp_files.iter () {
 
 			let temp_file = (
 				io_result_with_prefix (
@@ -342,7 +356,7 @@ impl TempFileManager {
 						"Error syncing temp file {}: ",
 						temp_file_name),
 					File::open (
-						self.temp_dir_path.join (
+						self_state.temp_dir_path.join (
 							temp_file_name)))
 			) ?;
 
@@ -358,7 +372,7 @@ impl TempFileManager {
 		// rename temp files
 
 		for & (ref temp_file_name, ref target_path)
-		in self.temp_files.iter () {
+		in self_state.temp_files.iter () {
 
 			let parent_dir =
 				target_path.parent ().unwrap ();
@@ -377,18 +391,18 @@ impl TempFileManager {
 					temp_file_name,
 					target_path.to_string_lossy ()),
 				rename_or_copy_and_delete (
-					self.temp_dir_path.join (
+					self_state.temp_dir_path.join (
 						temp_file_name),
 					target_path)
 			) ?;
 
 		}
 
-		self.temp_files.clear ();
+		self_state.temp_files.clear ();
 
 		// delete files
 
-		for delete_file_name in self.delete_files.iter () {
+		for delete_file_name in self_state.delete_files.iter () {
 
 			io_result_with_prefix (
 				|| format! (
@@ -400,7 +414,7 @@ impl TempFileManager {
 
 		}
 
-		self.delete_files.clear ();
+		self_state.delete_files.clear ();
 
 		// return
 
@@ -412,14 +426,17 @@ impl TempFileManager {
 		& self,
 	) -> bool {
 
-		! self.delete_files.is_empty ()
-		|| ! self.temp_files.is_empty ()
+		let self_state =
+			self.state.lock ().unwrap ();
+
+		! self_state.delete_files.is_empty ()
+		|| ! self_state.temp_files.is_empty ()
 
 	}
 
 }
 
-impl Drop for TempFileManager {
+impl Drop for TempFileManagerState {
 
 	fn drop (
 		& mut self,
@@ -431,7 +448,8 @@ impl Drop for TempFileManager {
 		in self.temp_files.iter () {
 
 			fs::remove_file (
-				temp_file_name,
+				self.temp_dir_path.join (
+					temp_file_name),
 			).unwrap_or (
 				() // do nothing
 			);
@@ -448,7 +466,8 @@ impl Drop for TempFileManager {
 
 		unsafe {
 
-			libc::close (self.lock_fd);
+			libc::close (
+				self.lock_fd);
 
 		}
 

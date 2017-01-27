@@ -34,7 +34,7 @@ pub fn check_bundles (
 
 	// begin transaction
 
-	let mut temp_files =
+	let temp_files =
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
@@ -71,10 +71,11 @@ pub fn check_bundles (
 
 	let mut checked_bundle_size: u64 = 0;
 
-	output.status_format (
-		format_args! (
-			"{} bundles ...",
-			if arguments.repair { "Reparing" } else { "Checking" }));
+	let output_job =
+		output_job_start! (
+			output,
+			"{} bundles",
+			if arguments.repair { "Reparing" } else { "Checking" });
 
 	let mut invalid_bundle_count: u64 = 0;
 
@@ -83,7 +84,7 @@ pub fn check_bundles (
 		bundle_size,
 	) in bundle_ids_and_sizes {
 
-		output.status_progress (
+		output_job.progress (
 			checked_bundle_size,
 			bundle_total_size);
 
@@ -122,30 +123,24 @@ pub fn check_bundles (
 
 	}
 
-	output.status_done ();
-
 	if invalid_bundle_count > 0 {
 
-		output.message_format (
-			format_args! (
-				"Found {} invalid bundle files",
-				invalid_bundle_count));
+		output_job_replace! (
+			output_job,
+			"Found {} invalid bundle files",
+			invalid_bundle_count);
 
 	} else {
 
-		output.message (
+		output_job_replace! (
+			output_job,
 			"No problems found");
 
 	}
 
 	// write changes to disk
 
-	output.status (
-		"Committing changes ...");
-
 	temp_files.commit () ?;
-
-	output.status_done ();
 
 	// clean up and return
 

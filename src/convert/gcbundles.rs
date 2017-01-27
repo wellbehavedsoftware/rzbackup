@@ -135,8 +135,10 @@ fn get_all_index_entries (
 	all_index_entries: & mut HashSet <(BundleId, ChunkId)>,
 ) -> Result <(), String> {
 
-	output.status (
-		"Reading indexes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Reading indexes");
 
 	let total_index_size: u64 =
 		index_ids_and_sizes.iter ().map (
@@ -151,7 +153,7 @@ fn get_all_index_entries (
 		index_size,
 	) in index_ids_and_sizes.iter () {
 
-		output.status_progress (
+		output_job.progress (
 			read_index_size,
 			total_index_size);
 
@@ -191,7 +193,7 @@ fn get_all_index_entries (
 
 	}
 
-	output.status_done ();
+	output_job.complete ();
 
 	Ok (())
 
@@ -207,8 +209,10 @@ fn read_bundles_metadata (
 	other_chunks_seen: & mut HashSet <ChunkId>,
 ) -> Result <(), String> {
 
-	output.status (
-		"Reading bundle metadata ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Reading bundle metadata");
 
 	let mut old_bundles_count: u64 = 0;
 	let old_bundles_total = old_bundles.len () as u64;
@@ -218,7 +222,7 @@ fn read_bundles_metadata (
 
 	for & old_bundle_id in old_bundles {
 
-		output.status_progress (
+		output_job.progress (
 			old_bundles_count,
 			old_bundles_total);
 
@@ -294,13 +298,11 @@ fn read_bundles_metadata (
 
 	}
 
-	output.status_done ();
-
-	output.message_format (
-		format_args! (
-			"Found {} bundles to compact and {} to delete",
-			bundles_to_compact.len (),
-			bundles_to_delete.len ()));
+	output_job_replace! (
+		output_job,
+		"Found {} bundles to compact and {} to delete",
+		bundles_to_compact.len (),
+		bundles_to_delete.len ());
 
 	Ok (())
 
@@ -316,15 +318,17 @@ fn delete_bundles (
 		return Ok (());
 	}
 
-	output.status (
-		"Deleting bundles ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Deleting bundles");
 
 	let bundles_to_delete_total = bundles_to_delete.len () as u64;
 	let mut bundles_to_delete_count: u64 = 0;
 
 	for & bundle_to_delete in bundles_to_delete {
 
-		output.status_progress (
+		output_job.progress (
 			bundles_to_delete_count,
 			bundles_to_delete_total);
 
@@ -338,7 +342,7 @@ fn delete_bundles (
 
 	}
 
-	output.status_done ();
+	output_job.complete ();
 
 	Ok (())
 
@@ -365,11 +369,12 @@ fn compact_bundles (
 			repository.bundle_path (
 				bundle_to_compact);
 
-		output.status_format (
-			format_args! (
-				"Reading bundle {} of {} ...",
+		let output_job =
+			output_job_start! (
+				output,
+				"Reading bundle {} of {}",
 				bundles_to_compact_count + 1,
-				bundles_to_compact_total));
+				bundles_to_compact_total);
 
 		let uncompacted_bundle =
 			read_bundle (
@@ -377,11 +382,14 @@ fn compact_bundles (
 				repository.encryption_key ()
 			) ?;
 
-		output.status_format (
-			format_args! (
-				"Compacting bundle {} of {} ...",
+		output_job.remove ();
+
+		let output_job =
+			output_job_start! (
+				output,
+				"Compacting bundle {} of {}",
 				bundles_to_compact_count + 1,
-				bundles_to_compact_total));
+				bundles_to_compact_total);
 
 		let compacted_bundle_file =
 			Box::new (
@@ -427,7 +435,7 @@ fn compact_bundles (
 			& compacted_bundle,
 			|chunks_written| {
 
-				output.status_progress (
+				output_job.progress (
 					chunks_written,
 					total_chunks)
 
@@ -436,7 +444,7 @@ fn compact_bundles (
 
 		temp_files.commit () ?;
 
-		output.status_done ();
+		output_job.complete ();
 
 		bundles_to_compact_count += 1;
 

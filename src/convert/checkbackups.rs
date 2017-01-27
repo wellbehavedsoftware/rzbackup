@@ -97,15 +97,17 @@ pub fn check_backups (
 
 	// check backups
 
-	output.status (
-		"Checking backups ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Checking backups");
 
 	let mut checked_backup_count: u64 = 0;
 	let mut error_backup_count: u64 = 0;
 
 	for backup_name in backup_names.iter () {
 
-		output.status_progress (
+		output_job.progress (
 			checked_backup_count,
 			backup_names.len () as u64);
 
@@ -185,20 +187,19 @@ pub fn check_backups (
 
 	}
 
-	output.status_done ();
-
 	if error_backup_count > 0 {
 
-		output.message_format (
-			format_args! (
-				"{} {} backups with errors out of {} checked",
-				if arguments.move_broken { "Moved" } else { "Found" },
-				error_backup_count,
-				backup_names.len ()));
+		output_job_replace! (
+			output_job,
+			"{} {} backups with errors out of {} checked",
+			if arguments.move_broken { "Moved" } else { "Found" },
+			error_backup_count,
+			backup_names.len ());
 
 		if ! arguments.move_broken {
 
-			output.message (
+			output_message! (
+				output,
 				"Run with --move-broken to move these to backups-broken \
 				directory");
 
@@ -206,10 +207,10 @@ pub fn check_backups (
 
 	} else {
 
-		output.message_format (
-			format_args! (
-				"All chunks present for {} backups checked",
-				backup_names.len ()));
+		output_job_replace! (
+			output_job,
+			"All chunks present for {} backups checked",
+			backup_names.len ());
 
 	}
 

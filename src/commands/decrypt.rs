@@ -1,7 +1,6 @@
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
-use std::process;
 
 use clap;
 
@@ -37,10 +36,11 @@ pub fn do_decrypt (
 
 		) ?;
 
-	output.status_format (
-		format_args! (
-			"Decrypting file {} ...",
-			arguments.encrypted_file_path.to_string_lossy ()));
+	let output_job =
+		output_job_start! (
+			output,
+			"Decrypting file {}",
+			arguments.encrypted_file_path.to_string_lossy ());
 
 	let mut input =
 		match CryptoReader::open (
@@ -52,14 +52,12 @@ pub fn do_decrypt (
 
 		Err (error) => {
 
-			output.clear_status ();
+			output_job_replace! (
+				output_job,
+				"Error opening encrypted file: {}",
+				error);
 
-			output.message_format (
-				format_args! (
-					"Error opening encrypted file: {}",
-					error));
-
-			process::exit (1);
+			return Ok (false);
 
 		},
 
@@ -74,14 +72,12 @@ pub fn do_decrypt (
 			input.read_exact (
 				& mut iv_buffer) {
 
-			output.clear_status ();
+			output_job_replace! (
+				output_job,
+				"Error opening encrypted file: {}",
+				error);
 
-			output.message_format (
-				format_args! (
-					"Error opening encrypted file: {}",
-					error));
-
-			process::exit (1);
+			return Ok (false);
 
 		}
 
@@ -96,20 +92,18 @@ pub fn do_decrypt (
 
 		Err (error) => {
 
-			output.clear_status ();
+			output_job_replace! (
+				output_job,
+				"Error decrypting file: {}",
+				error);
 
-			output.message_format (
-				format_args! (
-					"Error decrypting file: {}",
-					error));
-
-			process::exit (1);
+			return Ok (false);
 
 		},
 
 	};
 
-	output.status_done ();
+	output_job.complete ();
 
 	Ok (true)
 

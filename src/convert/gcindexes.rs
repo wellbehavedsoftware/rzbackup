@@ -40,7 +40,7 @@ pub fn gc_indexes (
 
 	// begin transaction
 
-	let mut temp_files =
+	let temp_files =
 		TempFileManager::new (
 			output,
 			& arguments.repository_path,
@@ -55,10 +55,15 @@ pub fn gc_indexes (
 
 	// get list of index files
 
-	let old_index_ids_and_sizes = (
+	let output_job =
+		output_job_start! (
+			output,
+			"Scanning indexes");
+
+	let old_index_ids_and_sizes =
 		scan_index_files_with_sizes (
-			& arguments.repository_path)
-	) ?;
+			& arguments.repository_path,
+		) ?;
 
 	let total_index_size: u64 =
 		old_index_ids_and_sizes.iter ().map (
@@ -66,28 +71,34 @@ pub fn gc_indexes (
 			old_index_size
 		).sum ();
 
-	output.message_format (
-		format_args! (
-			"Found {} index files with total size {}",
-			old_index_ids_and_sizes.len (),
-			total_index_size));
+	output_job_replace! (
+		output_job,
+		"Found {} index files",
+		old_index_ids_and_sizes.len ());
 
 	// get list of backup files
 
-	let backup_files = (
-		scan_backup_files (
-			& arguments.repository_path)
-	) ?;
+	let output_job =
+		output_job_start! (
+			output,
+			"Scanning backups");
 
-	output.message_format (
-		format_args! (
-			"Found {} backup files",
-			backup_files.len ()));
+	let backup_files =
+		scan_backup_files (
+			& arguments.repository_path,
+		) ?;
+
+	output_job_replace! (
+		output_job,
+		"Found {} backup files",
+		backup_files.len ());
 
 	// get a list of chunks used by backups
 
-	output.status (
-		"Reading backups ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Reading backups");
 
 	let mut backup_chunk_ids: HashSet <ChunkId> =
 		HashSet::new ();
@@ -97,7 +108,7 @@ pub fn gc_indexes (
 
 	for backup_file in backup_files {
 
-		output.status_progress (
+		output_job.progress (
 			backup_count,
 			backup_total);
 
@@ -111,17 +122,17 @@ pub fn gc_indexes (
 
 	}
 
-	output.status_done ();
-
-	output.message_format (
-		format_args! (
-			"Found {} chunks referenced by backups",
-			backup_chunk_ids.len ()));
+	output_job_replace! (
+		output_job,
+		"Found {} chunks referenced by backups",
+		backup_chunk_ids.len ());
 
 	// process indexes
 
-	output.status (
-		"Garbage collecting indexes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Garbage collecting indexes");
 
 	let mut old_index_progress: u64 = 0;
 
@@ -134,7 +145,7 @@ pub fn gc_indexes (
 		old_index_size,
 	) in old_index_ids_and_sizes {
 
-		output.status_progress (
+		output_job.progress (
 			old_index_progress,
 			total_index_size);
 
@@ -278,23 +289,23 @@ pub fn gc_indexes (
 
 	}
 
-	output.status_done ();
-
-	output.message_format (
-		format_args! (
-			"Removed {} chunks from {} modified and {} deleted indexes",
-			chunks_removed,
-			indexes_modified,
-			indexes_removed));
+	output_job_replace! (
+		output_job,
+		"Removed {} chunks from {} modified and {} deleted indexes",
+		chunks_removed,
+		indexes_modified,
+		indexes_removed);
 
 	// commit changes
 
-	output.status (
-		"Committing changes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Committing changes");
 
 	temp_files.commit () ?;
 
-	output.status_done ();
+	output_job.remove ();
 
 	// clean up and return
 

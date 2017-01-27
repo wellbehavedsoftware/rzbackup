@@ -1,3 +1,4 @@
+use std::mem;
 use std::path::PathBuf;
 
 use clap;
@@ -65,8 +66,10 @@ pub fn balance_indexes (
 
 	let mut balanced_index_size: u64 = 0;
 
-	output.status (
-		"Balancing indexes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Balancing indexes");
 
 	for (
 		old_index_id,
@@ -90,10 +93,16 @@ pub fn balance_indexes (
 
 			if entries_buffer.len () as u64 == arguments.bundles_per_index {
 
+				let index_entries =
+					mem::replace (
+						& mut entries_buffer,
+						Vec::new ());
+
 				flush_index_entries (
+					output,
 					& repository,
-					& mut temp_files,
-					& mut entries_buffer,
+					& temp_files,
+					& index_entries,
 				) ?;
 
 			}
@@ -106,7 +115,7 @@ pub fn balance_indexes (
 		balanced_index_size +=
 			old_index_size;
 
-		output.status_progress (
+		output_job.progress (
 			balanced_index_size,
 			total_index_size);
 
@@ -115,6 +124,7 @@ pub fn balance_indexes (
 	if ! entries_buffer.is_empty () {
 
 		flush_index_entries (
+			output,
 			& repository,
 			& mut temp_files,
 			& mut entries_buffer,
@@ -122,16 +132,18 @@ pub fn balance_indexes (
 
 	}
 
-	output.status_done ();
+	output_job.complete ();
 
 	// write changes to disk
 
-	output.status (
-		"Committing changes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Committing changes");
 
 	temp_files.commit () ?;
 
-	output.status_done ();
+	output_job.complete ();
 
 	// clean up and return
 

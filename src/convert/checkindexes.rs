@@ -83,10 +83,11 @@ pub fn check_indexes (
 	let mut seen_chunk_ids: HashSet <ChunkId> =
 		HashSet::new ();
 
-	output.status_format (
-		format_args! (
-			"{} indexes ...",
-			if arguments.repair { "Reparing" } else { "Checking" }));
+	let output_job =
+		output_job_start! (
+			output,
+			"{} indexes",
+			if arguments.repair { "Reparing" } else { "Checking" });
 
 	let mut missing_chunk_count: u64 = 0;
 	let mut duplicated_chunk_count: u64 = 0;
@@ -96,7 +97,7 @@ pub fn check_indexes (
 		old_index_size,
 	) in old_index_ids_and_sizes {
 
-		output.status_progress (
+		output_job.progress (
 			checked_index_size,
 			old_index_total_size);
 
@@ -255,46 +256,56 @@ pub fn check_indexes (
 
 	}
 
-	output.status_done ();
-
 	if missing_chunk_count + duplicated_chunk_count > 0 {
 
-		if missing_chunk_count > 0 {
+		if duplicated_chunk_count == 0 {
 
-			output.message_format (
-				format_args! (
-					"{} {} missing chunks",
-					if arguments.repair { "Removed" } else { "Found" },
-					missing_chunk_count));
+			output_job_replace! (
+				output_job,
+				"{} {} missing chunks",
+				if arguments.repair { "Removed" } else { "Found" },
+				missing_chunk_count);
+
+		} else if missing_chunk_count == 0 {
+
+			output_job_replace! (
+				output_job,
+				"{} {} duplicated chunks",
+				if arguments.repair { "Removed" } else { "Found" },
+				duplicated_chunk_count);
+
+		} else {
+
+			output_job_replace! (
+				output_job,
+				"{} {} missing and {} duplicated chunks",
+				if arguments.repair { "Removed" } else { "Found" },
+				missing_chunk_count,
+				duplicated_chunk_count);
 
 		}
 
-		if duplicated_chunk_count > 0 {
+		if arguments.repair {
 
-			output.message_format (
-				format_args! (
-					"{} {} duplicated chunks",
-					if arguments.repair { "Removed" } else { "Found" },
-					duplicated_chunk_count));
+			let output_job =
+				output_job_start! (
+					output,
+					"Committing changes");
 
-		}
+			temp_files.commit () ?;
 
-		if ! arguments.repair {
+			output_job.complete ();
 
-			output.message (
+		} else {
+
+			output_message! (
+				output,
 				"To remove missing/duplicated chunks run again with --repair \
 				option");
 
 		}
 
 	}
-
-	output.status (
-		"Committing changes ...");
-
-	temp_files.commit () ?;
-
-	output.status_done ();
 
 	// clean up and return
 

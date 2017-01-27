@@ -210,18 +210,17 @@ impl Repository {
 
 		// load info file
 
-		output.status_format (
-			format_args! (
-				"Loading repository {} ...",
-				repository_path.to_string_lossy ()));
+		let output_job =
+			output_job_start! (
+				output,
+				"Opening repository {}",
+				repository_path.to_string_lossy ());
 
-		let storage_info = (
-
+		let storage_info =
 			read_storage_info (
 				repository_path.join (
-					"info"))
-
-		) ?;
+					"info"),
+			) ?;
 
 		// decrypt encryption key with password
 
@@ -230,7 +229,7 @@ impl Repository {
 
 			if password_file_path.is_none () {
 
-				output.clear_status ();
+				output_job.remove ();
 
 				return Err (
 					"Required password file not provided".to_string ());
@@ -249,7 +248,7 @@ impl Repository {
 
 				None => {
 
-					output.clear_status ();
+					output_job.remove ();
 
 					return Err (
 						"Incorrect password".to_string ());
@@ -262,7 +261,7 @@ impl Repository {
 
 			if password_file_path.is_some () {
 
-				output.clear_status ();
+				output_job.remove ();
 
 				return Err (
 					"Unnecessary password file provided".to_string ());
@@ -273,7 +272,7 @@ impl Repository {
 
 		};
 
-		output.status_done ();
+		output_job.complete ();
 
 		// create thread pool
 
@@ -400,8 +399,10 @@ impl Repository {
 				String,
 			>;
 
-		output.status (
-			"Scanning bundles ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Scanning bundles");
 
 		let mut bundle_ids: HashSet <BundleId> =
 			HashSet::new ();
@@ -456,19 +457,19 @@ impl Repository {
 
 		}
 
-		output.status_done ();
-
-		output.message_format (
-			format_args! (
-				"Found {} bundle files",
-				bundle_ids.len ()));
+		output_job_replace! (
+			output_job,
+			"Found {} bundle files",
+			bundle_ids.len ());
 
 		let bundle_ids =
 			Arc::new (
 				bundle_ids);
 
-		output.status (
-			"Loading indexes ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Loading indexes");
 
 		// start tasks to load each index
 
@@ -505,8 +506,7 @@ impl Repository {
 				self.cpu_pool.spawn_fn (
 					move || {
 
-				let index = (
-
+				let index =
 					string_result_with_prefix (
 						|| format! (
 							"Error loading index {}",
@@ -515,9 +515,8 @@ impl Repository {
 							self_clone.data.path
 								.join ("index")
 								.join (& index_name),
-							self_clone.data.encryption_key))
-
-				) ?;
+							self_clone.data.encryption_key)
+					) ?;
 
 				let mut entries: Vec <IndexEntryData> =
 					Vec::new ();
@@ -608,7 +607,7 @@ impl Repository {
 
 			if count & 0x3f == 0x3f {
 
-				output.status_progress (
+				output_job.progress (
 					count as u64,
 					num_indexes as u64);
 
@@ -616,14 +615,17 @@ impl Repository {
 
 		}
 
-		output.status_done ();
+		output_job_replace! (
+			output_job,
+			"Loaded {} indexes",
+			count);
 
 		if error_count > 0 {
 
-			output.message_format (
-				format_args! (
-					"{} index files not loaded due to errors",
-					error_count));
+			output_message! (
+				output,
+				"{} index files not loaded due to errors",
+				error_count);
 
 		}
 
@@ -653,29 +655,19 @@ impl Repository {
 
 		// load backup
 
-		output.status_format (
-			format_args! (
-				"Loading backup {} ...",
-				backup_name));
+		let output_job =
+			output_job_start! (
+				output,
+				"Loading backup {}",
+				backup_name);
 
-		let backup_info = (
-
+		let backup_info =
 			read_backup_file (
 				self.data.path
 					.join ("backups")
 					.join (& backup_name [1 .. ]),
 				self.data.encryption_key,
-			).or_else (
-				|error| {
-
-					output.status_done ();
-
-					Err (error)
-
-				}
-			)
-
-		) ?;
+			) ?;
 
 		// expand backup data
 
@@ -698,7 +690,7 @@ impl Repository {
 				& mut sha1_digest,
 				& |count| {
 					if count & 0xf == 0xf {
-						output.status_tick ();
+						output_job.tick ();
 					}
 				},
 			) ?;
@@ -709,7 +701,7 @@ impl Repository {
 
 		}
 
-		output.status_done ();
+		output_job.complete ();
 
 		Ok (
 			(
@@ -755,10 +747,11 @@ impl Repository {
 			Cursor::new (
 				input_bytes);
 
-		output.status_format (
-			format_args! (
+		let output_job =
+			output_job_start! (
+				output,
 				"Restoring {}",
-				backup_name));
+				backup_name);
 
 		// restore backup
 
@@ -771,7 +764,7 @@ impl Repository {
 			& mut sha256_sum,
 			& |count| {
 				if count & 0x7f == 0x00 {
-					output.status_tick ();
+					output_job.tick ();
 				}
 			},
 		) ?;
@@ -796,7 +789,7 @@ impl Repository {
 
 		// done
 
-		output.status_done ();
+		output_job.complete ();
 
 		Ok (())
 
@@ -810,10 +803,11 @@ impl Repository {
 		target: & mut Write,
 	) -> Result <(), String> {
 
-		output.status_format (
-			format_args! (
+		let output_job =
+			output_job_start! (
+				output,
 				"Restoring {}",
-				backup_name));
+				backup_name);
 
 		let mut input =
 			RandomAccess::new (
@@ -847,7 +841,7 @@ impl Repository {
 
 		}
 
-		output.status_done ();
+		output_job.complete ();
 
 		Ok (())
 
@@ -1494,12 +1488,14 @@ impl Repository {
 		output: & Output,
 	) {
 
-		output.status (
-			"Closing repository ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Closing repository");
 
 		drop (self);
 
-		output.status_done ();
+		output_job.complete ();
 
 	}
 

@@ -1,8 +1,9 @@
-use std::collections::LinkedList;
+use std::mem;
 use std::path::PathBuf;
 
 use clap;
 
+use futures;
 use futures::BoxFuture;
 use futures::Future;
 
@@ -11,6 +12,8 @@ use futures_cpupool::CpuPool;
 use num_cpus;
 
 use output::Output;
+
+use rustc_serialize::hex::ToHex;
 
 use ::Repository;
 use ::TempFileManager;
@@ -103,14 +106,16 @@ impl <'a> IndexRebuilder <'a> {
 		let mut bundle_count: u64 = 0;
 		let bundle_total = bundle_ids.len () as u64;
 
-		output.status (
-			"Rebuilding indexes");
+		let output_job =
+			output_job_start! (
+				output,
+				"Rebuilding indexes");
 
-		type BundleFuture =
-			BoxFuture <(BundleId, proto::BundleInfo), String>;
+		type TaskFuture =
+			BoxFuture <Option <(BundleId, proto::BundleInfo)>, String>;
 
-		let mut bundle_futures: LinkedList <BundleFuture> =
-			LinkedList::new ();
+		let mut task_futures: Vec <TaskFuture> =
+			Vec::new ();
 
 		let mut bundle_ids_iter =
 			bundle_ids.into_iter ();
@@ -119,7 +124,7 @@ impl <'a> IndexRebuilder <'a> {
 
 			// start bundle load tasks
 
-			while bundle_futures.len () < self.num_threads {
+			while task_futures.len () < self.num_threads {
 
 				if let Some (bundle_id) =
 					bundle_ids_iter.next () {
@@ -127,16 +132,32 @@ impl <'a> IndexRebuilder <'a> {
 					let repository =
 						self.repository.clone ();
 
-					bundle_futures.push_back (
-						self.cpu_pool.spawn_fn (move ||
-							read_bundle_info (
-								repository.bundle_path (
-									bundle_id),
-								repository.encryption_key (),
-							).map (|bundle_info|
-								(bundle_id, bundle_info)
-							)
-						).boxed ()
+					let output_clone =
+						output.clone ();
+
+					task_futures.push (
+						self.cpu_pool.spawn_fn (move || {
+
+							let output_job =
+								output_job_start! (
+									output_clone,
+									"Reading bundle {}",
+									bundle_id.to_hex ());
+
+							let bundle_data =
+								read_bundle_info (
+									repository.bundle_path (
+										bundle_id),
+									repository.encryption_key (),
+								).map (|bundle_info|
+									Some ((bundle_id, bundle_info))
+								);
+
+							output_job.remove ();
+
+							bundle_data
+
+						}).boxed ()
 					);
 
 				} else {
@@ -147,17 +168,25 @@ impl <'a> IndexRebuilder <'a> {
 
 			// handle next bundle load
 
-			// TODO use select for better parallelism
+			if task_futures.is_empty () {
+				break;
+			}
 
-			if let Some (bundle_future) =
-				bundle_futures.pop_front () {
+			let (task_result, _index, remaining_task_futures) =
+				futures::select_all (
+					task_futures,
+				).wait ().map_err (
+					|(error, _index, _remaining_task_futures)|
+					error,
+				) ?;
 
-				output.status_progress (
+			task_futures = remaining_task_futures;
+
+			if let Some ((bundle_id, bundle_info)) = task_result {
+
+				output_job.progress (
 					bundle_count,
 					bundle_total);
-
-				let (bundle_id, bundle_info) =
-					bundle_future.wait () ?;
 
 				let mut index_bundle_header =
 					proto::IndexBundleHeader::new ();
@@ -177,18 +206,37 @@ impl <'a> IndexRebuilder <'a> {
 				if entries_buffer.len () as u64
 					== self.arguments.bundles_per_index {
 
-					flush_index_entries (
-						& self.repository,
-						& mut temp_files,
-						& mut entries_buffer,
-					) ?;
+					let output =
+						output.clone ();
+
+					let repository =
+						self.repository.clone ();
+
+					let temp_files =
+						temp_files.clone ();
+
+					let index_entries =
+						mem::replace (
+							& mut entries_buffer,
+							Vec::new ());
+
+					task_futures.push (
+						self.cpu_pool.spawn_fn (move || {
+
+							flush_index_entries (
+								& output,
+								& repository,
+								& temp_files,
+								& index_entries,
+							).map (|_| None )
+
+						}).boxed ()
+					);
 
 				}
 
 				bundle_count += 1;
 
-			} else {
-				break;
 			}
 
 		}
@@ -198,6 +246,7 @@ impl <'a> IndexRebuilder <'a> {
 		if ! entries_buffer.is_empty () {
 
 			flush_index_entries (
+				output,
 				& self.repository,
 				& mut temp_files,
 				& mut entries_buffer,
@@ -205,19 +254,24 @@ impl <'a> IndexRebuilder <'a> {
 
 		}
 
-		output.status_done ();
+		output_job.complete ();
 
 		// remove old indexes
+
+		let output_job =
+			output_job_start! (
+				output,
+				"Scanning old index files");
 
 		let old_index_ids =
 			scan_index_files (
 				& self.arguments.repository_path,
 			) ?;
 
-		output.message_format (
-			format_args! (
-				"Removing {} old index files",
-				old_index_ids.len ()));
+		output_job_update! (
+			output_job,
+			"Removing {} old index files",
+			old_index_ids.len ());
 
 		for old_index_id in old_index_ids {
 
@@ -227,14 +281,18 @@ impl <'a> IndexRebuilder <'a> {
 
 		}
 
+		output_job.complete ();
+
 		// commit changes
 
-		output.status (
-			"Committing changes ...");
+		let output_job =
+			output_job_start! (
+				output,
+				"Committing changes");
 
 		temp_files.commit () ?;
 
-		output.status_done ();
+		output_job.remove ();
 
 		// clean up and return
 

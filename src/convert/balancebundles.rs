@@ -1,10 +1,19 @@
 use std::collections::HashSet;
+use std::mem;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+use std::vec;
 
 use clap;
+
+use futures;
+use futures::BoxFuture;
+use futures::Future;
+use futures_cpupool::CpuPool;
+
+use num_cpus;
 
 use output::Output;
 
@@ -43,6 +52,15 @@ pub fn balance_bundles (
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
+
+	// create cpu pool
+
+	let max_tasks =
+		num_cpus::get ();
+
+	let cpu_pool =
+		CpuPool::new (
+			max_tasks);
 
 	loop {
 
@@ -90,11 +108,13 @@ pub fn balance_bundles (
 
 			if balance_bundles_real (
 				output,
+				& cpu_pool,
+				max_tasks,
 				& repository,
 				& mut temp_files,
 				& arguments,
 				minimum_chunk_count,
-				& unbalanced_indexes,
+				unbalanced_indexes,
 				new_bundles_total,
 			) ? {
 				break;
@@ -106,14 +126,15 @@ pub fn balance_bundles (
 
 		if arguments.sleep_time != Duration::from_secs (0) {
 
-			output.status_format (
-				format_args! (
-					"Sleeping ..."));
+			let output_job =
+				output_job_start! (
+					output,
+					"Sleeping");
 
 			thread::sleep (
 				arguments.sleep_time);
 
-			output.status_done ();
+			output_job.complete ();
 
 		}
 
@@ -138,8 +159,10 @@ fn read_indexes_find_unbalanced (
 	new_bundles_total: & mut u64,
 ) -> Result <(), String> {
 
-	output.status (
-		"Reading indexes ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Loading indexes");
 
 	let total_index_size =
 		old_index_ids_and_sizes.iter ().map (
@@ -157,6 +180,10 @@ fn read_indexes_find_unbalanced (
 		old_index_id,
 		old_index_size,
 	) in old_index_ids_and_sizes.iter () {
+
+		output_job.progress (
+			read_index_size,
+			total_index_size);
 
 		let old_index_path =
 			repository.index_path (
@@ -202,6 +229,7 @@ fn read_indexes_find_unbalanced (
 				|& chunk_count|
 
 				chunk_count < minimum_chunk_count
+				|| chunk_count > arguments.chunks_per_bundle
 
 			).sum ();
 
@@ -222,23 +250,19 @@ fn read_indexes_find_unbalanced (
 		read_index_size +=
 			old_index_size;
 
-		output.status_progress (
-			read_index_size,
-			total_index_size);
-
 	}
-
-	output.status_done ();
 
 	* new_bundles_total =
 		(unbalanced_chunks_count + arguments.chunks_per_bundle - 1)
 			/ arguments.chunks_per_bundle;
 
-	output.message_format (
-		format_args! (
-			"Found {} chunks to balance into {} bundles",
-			unbalanced_chunks_count,
-			new_bundles_total));
+	output_job.complete ();
+
+	output_message! (
+		output,
+		"Found {} chunks to balance into {} bundles",
+		unbalanced_chunks_count,
+		new_bundles_total);
 
 	Ok (())
 
@@ -246,16 +270,20 @@ fn read_indexes_find_unbalanced (
 
 fn balance_bundles_real (
 	output: & Output,
+	cpu_pool: & CpuPool,
+	max_tasks: usize,
 	repository: & Repository,
 	temp_files: & mut TempFileManager,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
-	unbalanced_indexes: & Vec <(IndexId, Vec <IndexEntry>)>,
+	unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)>,
 	new_bundles_total: u64,
 ) -> Result <bool, String> {
 
-	output.status (
-		"Reading bundles");
+	let output_job =
+		output_job_start! (
+			output,
+			"Balancing bundles");
 
 	let start_time =
 		Instant::now ();
@@ -265,230 +293,265 @@ fn balance_bundles_real (
 
 	let mut new_bundles_count: u64 = 0;
 
-	let mut balanced_chunks: Vec <(ChunkId, Vec <u8>)> =
+	let mut pending_chunks: Vec <(ChunkId, Vec <u8>)> =
 		Vec::new ();
 
-	let mut new_index_entries: Vec <IndexEntry> =
+	let mut pending_index_entries: Vec <IndexEntry> =
 		Vec::new ();
 
-	for & (
-		ref unbalanced_index_id,
-		ref unbalanced_index_entries,
-	) in unbalanced_indexes {
+	let mut index_iterator: vec::IntoIter <(IndexId, Vec <IndexEntry>)> =
+		unbalanced_indexes.into_iter ();
 
-		let mut unbalanced_index_entries_iter =
-			unbalanced_index_entries.iter ();
+	let mut index_entry_iterator: vec::IntoIter <IndexEntry> =
+		Vec::new ().into_iter ();
 
-		while let Some (& (
-			ref unbalanced_index_bundle_header,
-			ref unbalanced_index_bundle_info,
-		)) = unbalanced_index_entries_iter.next () {
+	enum Task {
+		ReadBundle (Vec <(ChunkId, Vec <u8>)>),
+		WriteBundle (IndexEntry),
+	}
 
-			let unbalanced_bundle_id =
-				unbalanced_index_bundle_header.get_id ().to_owned ();
+	let mut task_futures: Vec <BoxFuture <Task, String>> =
+		Vec::new ();
 
-			let unbalanced_bundle_id_hex =
-				unbalanced_bundle_id.to_hex ();
+	loop {
 
-			if unbalanced_index_bundle_info.get_chunk_record ().len () as u64
-				>= minimum_chunk_count {
+		let now =
+			Instant::now ();
 
-				// bundle meets fill factor, nothing to do
+		// write bundles
 
-				new_index_entries.push (
-					(
-						unbalanced_index_bundle_header.clone (),
-						unbalanced_index_bundle_info.clone (),
-					)
-				);
+		while task_futures.len () < max_tasks
+		&& pending_chunks.len () >= arguments.chunks_per_bundle as usize {
 
-			} else {
+			let mut bundle_chunks =
+				pending_chunks.split_off (
+					arguments.chunks_per_bundle as usize);
 
-				// bundle does not meet fill factor, rebundle its contents
+			mem::swap (
+				& mut bundle_chunks,
+				& mut pending_chunks);
 
-				let unbalanced_bundle_path =
-					repository.path ()
-						.join ("bundles")
-						.join (& unbalanced_bundle_id_hex [0 .. 2])
-						.join (& unbalanced_bundle_id_hex);
+			let output = output.clone ();
+			let repository = repository.clone ();
+			let temp_files = temp_files.clone ();
 
-				let unbalanced_bundle =
-					read_bundle (
-						& unbalanced_bundle_path,
-						repository.encryption_key ()
-					) ?;
+			task_futures.push (
+				cpu_pool.spawn_fn (move || {
 
-				let mut unbalanced_bundle_iter =
-					unbalanced_bundle.into_iter ();
+				flush_bundle (
+					& output,
+					& repository,
+					& temp_files,
+					& bundle_chunks,
+					new_bundles_count,
+					new_bundles_total,
+				).map (
+					|index_entry|
+					Task::WriteBundle (index_entry)
+				)
 
-				while let Some ((
-					unbalanced_chunk_id,
-					unbalanced_chunk_data,
-				)) = unbalanced_bundle_iter.next () {
+			}).boxed ());
 
-					balanced_chunks.push (
-						(
-							unbalanced_chunk_id,
-							unbalanced_chunk_data,
-						)
-					);
+			new_bundles_count += 1;
 
-					if balanced_chunks.len () as u64
-						== arguments.chunks_per_bundle {
+		}
 
-						output.clear_status ();
+		// read bundles
 
-						flush_bundle (
-							output,
-							& repository,
-							temp_files,
-							& mut balanced_chunks,
-							& mut new_index_entries,
-							new_bundles_count,
-							new_bundles_total,
-						) ?;
+		while task_futures.len () < max_tasks
+		&& now < checkpoint_time {
 
-						new_bundles_count += 1;
+			if let Some ((index_bundle_header, bundle_info)) =
+				index_entry_iterator.next () {
 
-						// handle checkpoints
+				let bundle_chunks =
+					bundle_info.get_chunk_record ().len () as u64;
 
-						if checkpoint_time < Instant::now () {
+				if bundle_chunks >= minimum_chunk_count
+					&& bundle_chunks <= arguments.chunks_per_bundle {
 
-							output.clear_status ();
+					pending_index_entries.push ((
+						index_bundle_header,
+						bundle_info,
+					));
 
-							// write out remaining chunks from this bundle
+				} else {
 
-							while let Some ((
-								unbalanced_chunk_id,
-								unbalanced_chunk_data,
-							)) = unbalanced_bundle_iter.next () {
+					let bundle_id =
+						index_bundle_header.get_id ().to_owned ();
 
-								balanced_chunks.push (
-									(
-										unbalanced_chunk_id,
-										unbalanced_chunk_data,
-									)
-								);
+					let bundle_id_hex =
+						bundle_id.to_hex ();
 
-							}
+					let bundle_path =
+						repository.path ()
+							.join ("bundles")
+							.join (& bundle_id_hex [0 .. 2])
+							.join (& bundle_id_hex);
 
-							flush_bundle (
+					temp_files.delete (
+						bundle_path.clone ());
+
+					let encryption_key =
+						repository.encryption_key ();
+
+					let output =
+						output.clone ();
+
+					task_futures.push (
+						cpu_pool.spawn_fn (move || {
+
+						let output_job =
+							output_job_start! (
 								output,
-								& repository,
-								temp_files,
-								& mut balanced_chunks,
-								& mut new_index_entries,
-								new_bundles_count,
-								new_bundles_total,
+								"Reading bundle {}",
+								bundle_id.to_hex ());
+
+						let bundle_chunks =
+							read_bundle (
+								& bundle_path,
+								encryption_key,
 							) ?;
 
-							temp_files.delete (
-								unbalanced_bundle_path);
+						output_job.remove ();
 
-							// write out remaining entries from this index
+						Ok (Task::ReadBundle (
+							bundle_chunks
+						))
 
-							while let Some (& (
-								ref unbalanced_index_bundle_header,
-								ref unbalanced_index_bundle_info,
-							)) = unbalanced_index_entries_iter.next () {
-
-								new_index_entries.push (
-									(
-										unbalanced_index_bundle_header.clone (),
-										unbalanced_index_bundle_info.clone (),
-									)
-								);
-
-							}
-
-							temp_files.delete (
-								repository.index_path (
-									* unbalanced_index_id));
-
-							flush_index (
-								output,
-								& repository,
-								temp_files,
-								& mut new_index_entries,
-							) ?;
-
-							// commit changes and return
-
-							output.message (
-								"Performing checkpoint");
-
-							temp_files.commit () ?;
-
-							return Ok (false);
-
-						}
-
-						output.status (
-							"Reading bundles");
-
-					}
+					}).boxed ())
 
 				}
 
+			} else if let Some ((index_id, index_entries)) =
+				index_iterator.next () {
+
 				temp_files.delete (
-					unbalanced_bundle_path);
+					repository.index_path (
+						index_id));
+
+				index_entry_iterator = index_entries.into_iter ();
+
+			} else {
+
+				break;
 
 			}
 
 		}
 
-		temp_files.delete (
-			repository.index_path (
-				* unbalanced_index_id));
+		// process task results
+
+		let (task_value, _index, remaining_tasks) =
+			futures::select_all (
+				task_futures,
+			).wait ().map_err (
+				|(error, _index, _remaining_tasks)|
+
+				error
+
+			) ?;
+
+		task_futures = remaining_tasks;
+
+		match task_value {
+
+			Task::ReadBundle (bundle_chunks) =>
+				for bundle_chunk in bundle_chunks {
+					pending_chunks.push (
+						bundle_chunk);
+				},
+
+			Task::WriteBundle (index_entry) =>
+				pending_index_entries.push (
+					index_entry),
+
+		}
+
+		// end for checkpoint or no more work
+
+		if task_futures.is_empty ()
+		&& checkpoint_time < now {
+			break;
+		}
 
 	}
 
-	output.clear_status ();
-
-	// write final bundle and/or index
-
-	flush_bundle (
-		output,
-		& repository,
-		temp_files,
-		& mut balanced_chunks,
-		& mut new_index_entries,
+	output_job_replace! (
+		output_job,
+		"Balanced {} out of {} bundles",
 		new_bundles_count,
-		new_bundles_total,
-	) ?;
+		new_bundles_total);
 
-	flush_index (
-		output,
-		& repository,
-		temp_files,
-		& mut new_index_entries,
-	) ?;
+	// write pending chunks and index
 
-	temp_files.commit () ?;
+	for index_entry in index_entry_iterator {
+		pending_index_entries.push (
+			index_entry);
+	}
 
-	Ok (true)
+	if ! pending_index_entries.is_empty ()
+		|| ! pending_chunks.is_empty () {
+
+		let output_job_checkpoint =
+			output_job_start! (
+				output,
+				"Performing checkpoint");
+
+		pending_index_entries.push (
+			flush_bundle (
+				& output,
+				& repository,
+				& temp_files,
+				& pending_chunks,
+				new_bundles_count,
+				new_bundles_total,
+			) ?
+		);
+
+		flush_index (
+			output,
+			& repository,
+			temp_files,
+			& pending_index_entries,
+		) ?;
+
+		{
+
+			let output_job_commit =
+				output_job_start! (
+					output,
+					"Comitting changes");
+
+			temp_files.commit () ?;
+
+			output_job_commit.remove ();
+
+		}
+
+		output_job_checkpoint.remove ();
+
+	}
+
+	Ok (index_iterator.next ().is_none ())
 
 }
 
 fn flush_bundle (
 	output: & Output,
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
-	balanced_chunks: & mut Vec <(ChunkId, Vec <u8>)>,
-	new_index_entries: & mut Vec <IndexEntry>,
+	temp_files: & TempFileManager,
+	bundle_chunks: & Vec <(ChunkId, Vec <u8>)>,
 	new_bundles_count: u64,
 	new_bundles_total: u64,
-) -> Result <(), String> {
+) -> Result <IndexEntry, String> {
 
-	if balanced_chunks.is_empty () {
-		return Ok (())
-	}
-
-	output.status_format (
-		format_args! (
-			"Writing bundle {} of {} ...",
+	let output_job =
+		output_job_start! (
+			output,
+			"Writing bundle {} of {}",
 			new_bundles_count + 1,
-			new_bundles_total));
+			new_bundles_total);
 
 	let new_bundle_bytes: Vec <u8> =
 		rand::thread_rng ()
@@ -513,21 +576,24 @@ fn flush_bundle (
 		);
 
 	let total_chunks =
-		balanced_chunks.len () as u64;
+		bundle_chunks.len () as u64;
 
 	let new_index_bundle_info =
 		write_bundle (
 			new_bundle_file,
 			repository.encryption_key (),
-			& balanced_chunks,
+			& bundle_chunks,
 			|chunks_written| {
 
-				output.status_progress (
+				output_job.progress (
 					chunks_written,
 					total_chunks)
 
 			}
 		) ?;
+
+
+	output_job.remove ();
 
 	let mut new_index_bundle_header =
 		proto::IndexBundleHeader::new ();
@@ -535,34 +601,28 @@ fn flush_bundle (
 	new_index_bundle_header.set_id (
 		new_bundle_bytes);
 
-	new_index_entries.push (
-		(
-			new_index_bundle_header,
-			new_index_bundle_info,
-		)
-	);
-
-	balanced_chunks.clear ();
-
-	output.status_done ();
-
-	Ok (())
+	Ok ((
+		new_index_bundle_header,
+		new_index_bundle_info,
+	))
 
 }
 
 fn flush_index (
 	output: & Output,
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
-	new_index_entries: & mut Vec <IndexEntry>,
+	temp_files: & TempFileManager,
+	new_index_entries: & Vec <IndexEntry>,
 ) -> Result <(), String> {
 
 	if new_index_entries.is_empty () {
 		return Ok (());
 	}
 
-	output.status (
-		"Writing index ...");
+	let output_job =
+		output_job_start! (
+			output,
+			"Writing index");
 
 	let new_index_bytes: Vec <u8> =
 		rand::thread_rng ()
@@ -591,9 +651,7 @@ fn flush_index (
 		& new_index_entries,
 	) ?;
 
-	new_index_entries.clear ();
-
-	output.status_done ();
+	output_job.remove ();
 
 	Ok (())
 

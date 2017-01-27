@@ -90,7 +90,7 @@ impl <'a> RandomAccess <'a> {
 			let instruction_old_limit =
 				protobuf_result (
 					coded_input_stream.push_limit (
-						instruction_length),
+						instruction_length as u64),
 				) ?;
 
 			let backup_instruction =
