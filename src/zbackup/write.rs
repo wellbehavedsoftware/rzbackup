@@ -258,6 +258,33 @@ pub fn write_index_auto_output (
 }
 
 #[ inline ]
+pub fn write_index_with_id (
+	repository: & Repository,
+	temp_files: & TempFileManager,
+	index_id: IndexId,
+	index_entries: & [IndexEntry],
+) -> Result <(), String> {
+
+	let index_path =
+		repository.index_path (
+			index_id);
+
+	let index_file =
+		Box::new (
+			temp_files.create (
+				index_path,
+			) ?
+		);
+
+	write_index (
+		index_file,
+		repository.encryption_key (),
+		index_entries,
+	)
+
+}
+
+#[ inline ]
 pub fn write_index (
 	target: Box <Write>,
 	key: Option <[u8; KEY_SIZE]>,

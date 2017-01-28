@@ -16,6 +16,7 @@ use futures_cpupool::CpuPool;
 use num_cpus;
 
 use output::Output;
+use output::OutputJob;
 
 use rand;
 use rand::Rng;
@@ -55,12 +56,15 @@ pub fn balance_bundles (
 
 	// create cpu pool
 
-	let max_tasks =
+	let cpu_count =
 		num_cpus::get ();
 
 	let cpu_pool =
 		CpuPool::new (
-			max_tasks);
+			cpu_count);
+
+	let max_tasks =
+		cpu_count + 1;
 
 	loop {
 
@@ -306,12 +310,23 @@ fn balance_bundles_real (
 		Vec::new ().into_iter ();
 
 	enum Task {
-		ReadBundle (Vec <(ChunkId, Vec <u8>)>),
-		WriteBundle (IndexEntry),
+
+		ReadBundle {
+			output_job: OutputJob,
+			chunks: Vec <(ChunkId, Vec <u8>)>,
+		},
+
+		WriteBundle {
+			output_job: OutputJob,
+			index_entry: IndexEntry,
+		},
+
 	}
 
 	let mut task_futures: Vec <BoxFuture <Task, String>> =
 		Vec::new ();
+
+	output.pause ();
 
 	loop {
 
@@ -331,23 +346,32 @@ fn balance_bundles_real (
 				& mut bundle_chunks,
 				& mut pending_chunks);
 
-			let output = output.clone ();
 			let repository = repository.clone ();
 			let temp_files = temp_files.clone ();
+
+			let output_job_write_bundle =
+				output_job_start! (
+					output,
+					"Writing bundle {} of {}",
+					new_bundles_count + 1,
+					new_bundles_total);
 
 			task_futures.push (
 				cpu_pool.spawn_fn (move || {
 
 				flush_bundle (
-					& output,
+					& output_job_write_bundle,
 					& repository,
 					& temp_files,
 					& bundle_chunks,
-					new_bundles_count,
-					new_bundles_total,
 				).map (
 					|index_entry|
-					Task::WriteBundle (index_entry)
+
+					Task::WriteBundle {
+						output_job: output_job_write_bundle,
+						index_entry: index_entry
+					}
+
 				)
 
 			}).boxed ());
@@ -395,17 +419,14 @@ fn balance_bundles_real (
 					let encryption_key =
 						repository.encryption_key ();
 
-					let output =
-						output.clone ();
+					let output_job_read_bundle =
+						output_job_start! (
+							output,
+							"Reading bundle {}",
+							bundle_id.to_hex ());
 
 					task_futures.push (
 						cpu_pool.spawn_fn (move || {
-
-						let output_job =
-							output_job_start! (
-								output,
-								"Reading bundle {}",
-								bundle_id.to_hex ());
 
 						let bundle_chunks =
 							read_bundle (
@@ -413,11 +434,10 @@ fn balance_bundles_real (
 								encryption_key,
 							) ?;
 
-						output_job.remove ();
-
-						Ok (Task::ReadBundle (
-							bundle_chunks
-						))
+						Ok (Task::ReadBundle {
+							output_job: output_job_read_bundle,
+							chunks: bundle_chunks,
+						})
 
 					}).boxed ())
 
@@ -440,7 +460,13 @@ fn balance_bundles_real (
 
 		}
 
-		// process task results
+		// wait for background tasks
+
+		if task_futures.is_empty () {
+			break;
+		}
+
+		output.unpause ();
 
 		let (task_value, _index, remaining_tasks) =
 			futures::select_all (
@@ -454,17 +480,37 @@ fn balance_bundles_real (
 
 		task_futures = remaining_tasks;
 
+		output.pause ();
+
+		// process background task
+
 		match task_value {
 
-			Task::ReadBundle (bundle_chunks) =>
+			Task::ReadBundle {
+				output_job: output_job_read_bundle,
+				chunks: bundle_chunks,
+			} => {
+
+				output_job_read_bundle.remove ();
+
 				for bundle_chunk in bundle_chunks {
 					pending_chunks.push (
 						bundle_chunk);
-				},
+				}
 
-			Task::WriteBundle (index_entry) =>
+			},
+
+			Task::WriteBundle {
+				output_job: output_job_write_bundle,
+				index_entry,
+			} => {
+
+				output_job_write_bundle.remove ();
+
 				pending_index_entries.push (
-					index_entry),
+					index_entry);
+
+			},
 
 		}
 
@@ -483,6 +529,8 @@ fn balance_bundles_real (
 		new_bundles_count,
 		new_bundles_total);
 
+	output.unpause ();
+
 	// write pending chunks and index
 
 	for index_entry in index_entry_iterator {
@@ -498,16 +546,25 @@ fn balance_bundles_real (
 				output,
 				"Performing checkpoint");
 
-		pending_index_entries.push (
-			flush_bundle (
-				& output,
-				& repository,
-				& temp_files,
-				& pending_chunks,
-				new_bundles_count,
-				new_bundles_total,
-			) ?
-		);
+		{
+
+			let output_job_checkpoint_write_bundle =
+				output_job_start! (
+					output,
+					"Writing bundle with remaining chunks");
+
+			pending_index_entries.push (
+				flush_bundle (
+					& output_job_checkpoint_write_bundle,
+					& repository,
+					& temp_files,
+					& pending_chunks,
+				) ?
+			);
+
+			output_job_checkpoint_write_bundle.remove ();
+
+		}
 
 		flush_index (
 			output,
@@ -538,20 +595,11 @@ fn balance_bundles_real (
 }
 
 fn flush_bundle (
-	output: & Output,
+	output_job: & OutputJob,
 	repository: & Repository,
 	temp_files: & TempFileManager,
 	bundle_chunks: & Vec <(ChunkId, Vec <u8>)>,
-	new_bundles_count: u64,
-	new_bundles_total: u64,
 ) -> Result <IndexEntry, String> {
-
-	let output_job =
-		output_job_start! (
-			output,
-			"Writing bundle {} of {}",
-			new_bundles_count + 1,
-			new_bundles_total);
 
 	let new_bundle_bytes: Vec <u8> =
 		rand::thread_rng ()
@@ -591,9 +639,6 @@ fn flush_bundle (
 
 			}
 		) ?;
-
-
-	output_job.remove ();
 
 	let mut new_index_bundle_header =
 		proto::IndexBundleHeader::new ();
