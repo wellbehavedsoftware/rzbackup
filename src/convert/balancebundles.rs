@@ -56,15 +56,12 @@ pub fn balance_bundles (
 
 	// create cpu pool
 
-	let cpu_count =
-		num_cpus::get ();
+	let num_threads =
+		(num_cpus::get () - 1) * 5 / 3 + 1;
 
 	let cpu_pool =
 		CpuPool::new (
-			cpu_count);
-
-	let max_tasks =
-		cpu_count + 1;
+			num_threads);
 
 	loop {
 
@@ -108,12 +105,28 @@ pub fn balance_bundles (
 				& mut new_bundles_total,
 			) ?;
 
+			// do nothing if there is only one small bundle
+
+			if count_unbalanced_bundles (
+				minimum_chunk_count,
+				arguments.chunks_per_bundle,
+				& unbalanced_indexes,
+			) < 2 {
+
+				output_message! (
+					output,
+					"Nothing to do");
+
+				break;
+
+			}
+
 			// balance bundles
 
 			if balance_bundles_real (
 				output,
 				& cpu_pool,
-				max_tasks,
+				num_threads,
 				& repository,
 				& mut temp_files,
 				& arguments,
@@ -269,6 +282,39 @@ fn read_indexes_find_unbalanced (
 		new_bundles_total);
 
 	Ok (())
+
+}
+
+fn count_unbalanced_bundles (
+	minimum_chunk_count: u64,
+	maximum_chunk_count: u64,
+	unbalanced_indexes: & [(IndexId, Vec <IndexEntry>)],
+) -> u64 {
+
+	let unbalanced_bundle_ids: HashSet <BundleId> =
+		unbalanced_indexes.iter ().flat_map (
+			|& (ref _index_id, ref index_entries)|
+
+			index_entries.iter ().filter (
+				|&& (ref _index_bundle_header, ref bundle_info)| {
+
+				let chunk_count =
+					bundle_info.get_chunk_record ().len () as u64;
+
+				chunk_count < minimum_chunk_count
+				|| chunk_count > maximum_chunk_count
+
+			}).map (
+				|& (ref index_bundle_header, ref _bundle_info)|
+
+				to_array_24 (
+					index_bundle_header.get_id ())
+
+			)
+
+		).collect ();
+
+	unbalanced_bundle_ids.len () as u64
 
 }
 
@@ -523,74 +569,102 @@ fn balance_bundles_real (
 
 	}
 
+	output.unpause ();
+
+	// write final bundle
+
+	if new_bundles_count == new_bundles_total - 1 {
+
+		let output_job_final_bundle =
+			output_job_start! (
+				output,
+				"Writing bundle {} of {}",
+				new_bundles_count + 1,
+				new_bundles_total);
+
+		pending_index_entries.push (
+			flush_bundle (
+				& output_job_final_bundle,
+				& repository,
+				& temp_files,
+				& pending_chunks,
+			) ?
+		);
+
+		pending_chunks.clear ();
+
+		output_job_final_bundle.remove ();
+
+		new_bundles_count += 1;
+
+	}
+
 	output_job_replace! (
 		output_job,
 		"Balanced {} out of {} bundles",
 		new_bundles_count,
 		new_bundles_total);
 
-	output.unpause ();
+	// perform checkpoint
 
-	// write pending chunks and index
+	if new_bundles_count < new_bundles_total {
 
-	for index_entry in index_entry_iterator {
-		pending_index_entries.push (
-			index_entry);
-	}
+		if ! pending_chunks.is_empty () {
 
-	if ! pending_index_entries.is_empty ()
-		|| ! pending_chunks.is_empty () {
-
-		let output_job_checkpoint =
-			output_job_start! (
-				output,
-				"Performing checkpoint");
-
-		{
-
-			let output_job_checkpoint_write_bundle =
+			let output_job_checkpoint =
 				output_job_start! (
 					output,
-					"Writing bundle with remaining chunks");
+					"Writing remaining chunks for checkpoint");
 
 			pending_index_entries.push (
 				flush_bundle (
-					& output_job_checkpoint_write_bundle,
+					& output_job_checkpoint,
 					& repository,
 					& temp_files,
 					& pending_chunks,
 				) ?
 			);
 
-			output_job_checkpoint_write_bundle.remove ();
+			output_job_checkpoint.remove ();
 
 		}
 
-		flush_index (
-			output,
-			& repository,
-			temp_files,
-			& pending_index_entries,
-		) ?;
+		for index_entry in index_entry_iterator {
 
-		{
-
-			let output_job_commit =
-				output_job_start! (
-					output,
-					"Comitting changes");
-
-			temp_files.commit () ?;
-
-			output_job_commit.remove ();
+			pending_index_entries.push (
+				index_entry);
 
 		}
-
-		output_job_checkpoint.remove ();
 
 	}
 
-	Ok (index_iterator.next ().is_none ())
+	// write index
+
+	flush_index (
+		output,
+		& repository,
+		temp_files,
+		& pending_index_entries,
+	) ?;
+
+	// commit changes
+
+	{
+
+		let output_job_commit =
+			output_job_start! (
+				output,
+				"Comitting changes");
+
+		temp_files.commit () ?;
+
+		output_job_commit.remove ();
+
+	}
+
+	// return
+
+	Ok (new_bundles_count == new_bundles_total)
 
 }
 
