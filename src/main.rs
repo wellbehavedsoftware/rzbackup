@@ -38,16 +38,28 @@ fn main () {
 		& output,
 	) {
 
-		Ok (true) =>
-			process::exit (0),
+		Ok (true) => {
 
-		Ok (false) =>
-			process::exit (1),
+			output.flush ();
+
+			process::exit (0);
+
+		},
+
+		Ok (false) => {
+
+			output.flush ();
+
+			process::exit (1);
+
+		},
 
 		Err (error) => {
 
 			output.message (
 				error);
+
+			output.flush ();
 
 			process::exit (1);
 
