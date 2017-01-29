@@ -119,7 +119,7 @@ impl <'a> IndexRebuilder <'a> {
 
 		// rebuild indexes
 
-		let mut entries_buffer: Vec <IndexEntry> =
+		let mut entries_buffer: Vec <RawIndexEntry> =
 			Vec::new ();
 
 		let mut bundle_count: u64 = 0;

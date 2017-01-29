@@ -5,7 +5,7 @@ use clap;
 
 use output::Output;
 
-use ::IndexEntry;
+use ::RawIndexEntry;
 use ::Repository;
 use ::TempFileManager;
 use ::convert::utils::*;
@@ -61,7 +61,7 @@ pub fn balance_indexes (
 
 	// balance indexes
 
-	let mut entries_buffer: Vec <IndexEntry> =
+	let mut entries_buffer: Vec <RawIndexEntry> =
 		Vec::new ();
 
 	let mut balanced_index_size: u64 = 0;

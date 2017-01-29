@@ -192,7 +192,7 @@ pub fn write_bundle <
 pub fn write_index_auto (
 	repository: & Repository,
 	temp_files: & TempFileManager,
-	index_entries: & [IndexEntry],
+	index_entries: & [RawIndexEntry],
 ) -> Result <IndexId, String> {
 
 	let index_id =
@@ -224,7 +224,7 @@ pub fn write_index_auto_output (
 	repository: & Repository,
 	temp_files: & TempFileManager,
 	index_id: IndexId,
-	index_entries: & [IndexEntry],
+	index_entries: & [RawIndexEntry],
 ) -> Result <IndexId, String> {
 
 	let output_job =
@@ -262,7 +262,7 @@ pub fn write_index_with_id (
 	repository: & Repository,
 	temp_files: & TempFileManager,
 	index_id: IndexId,
-	index_entries: & [IndexEntry],
+	index_entries: & [RawIndexEntry],
 ) -> Result <(), String> {
 
 	let index_path =
@@ -288,7 +288,7 @@ pub fn write_index_with_id (
 pub fn write_index (
 	target: Box <Write>,
 	key: Option <[u8; KEY_SIZE]>,
-	index_entries: & [IndexEntry],
+	index_entries: & [RawIndexEntry],
 ) -> Result <(), String> {
 
 	let output =
@@ -312,7 +312,7 @@ pub fn write_index_output_job (
 	output_job: & OutputLog,
 	target: Box <Write>,
 	key: Option <[u8; KEY_SIZE]>,
-	index_entries: & [IndexEntry],
+	index_entries: & [RawIndexEntry],
 ) -> Result <(), String> {
 
 	let mut target =

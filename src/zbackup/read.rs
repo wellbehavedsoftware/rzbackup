@@ -177,11 +177,11 @@ pub fn read_backup_file <PathRef: AsRef <Path>> (
 pub fn read_index <PathRef: AsRef <Path>> (
 	index_path: PathRef,
 	key: Option <[u8; KEY_SIZE]>,
-) -> Result <Vec <IndexEntry>, String> {
+) -> Result <Vec <RawIndexEntry>, String> {
 
 	let index_path = index_path.as_ref ();
 
-	let mut index_entries: Vec <IndexEntry> =
+	let mut index_entries: Vec <RawIndexEntry> =
 		vec! ();
 
 	// open file

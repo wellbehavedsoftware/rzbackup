@@ -185,7 +185,7 @@ pub fn gc_indexes (
 
 		// rewrite the index
 
-		let mut new_index_entries: Vec <IndexEntry> =
+		let mut new_index_entries: Vec <RawIndexEntry> =
 			Vec::new ();
 
 		for & (

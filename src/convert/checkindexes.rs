@@ -111,7 +111,7 @@ pub fn check_indexes (
 				repository.encryption_key (),
 			) ?;
 
-		let mut new_index_entries: Vec <IndexEntry> =
+		let mut new_index_entries: Vec <RawIndexEntry> =
 			Vec::new ();
 
 		let mut changes = false;

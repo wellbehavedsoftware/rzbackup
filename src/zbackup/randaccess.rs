@@ -125,12 +125,12 @@ impl <'a> RandomAccess <'a> {
 						offset,
 
 					end:
-						offset + index_entry.size,
+						offset + index_entry.size (),
 
 				});
 
 				offset +=
-					index_entry.size;
+					index_entry.size ();
 
 			}
 

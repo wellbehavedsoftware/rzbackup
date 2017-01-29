@@ -366,7 +366,7 @@ pub fn flush_index_entries (
 	output: & Output,
 	repository: & Repository,
 	temp_files: & TempFileManager,
-	index_entries_buffer: & Vec <IndexEntry>,
+	index_entries_buffer: & Vec <RawIndexEntry>,
 ) -> Result <IndexId, String> {
 
 	let index_id =

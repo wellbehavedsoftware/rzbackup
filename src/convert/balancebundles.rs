@@ -90,7 +90,7 @@ pub fn balance_bundles (
 
 			// read indexes and discard any which are balanced
 
-			let mut unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)> =
+			let mut unbalanced_indexes: Vec <(IndexId, Vec <RawIndexEntry>)> =
 				Vec::new ();
 
 			let mut new_bundles_total: u64 = 0;
@@ -172,7 +172,7 @@ fn read_indexes_find_unbalanced (
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
 	old_index_ids_and_sizes: & Vec <(IndexId, u64)>,
-	unbalanced_indexes: & mut Vec <(IndexId, Vec <IndexEntry>)>,
+	unbalanced_indexes: & mut Vec <(IndexId, Vec <RawIndexEntry>)>,
 	new_bundles_total: & mut u64,
 ) -> Result <(), String> {
 
@@ -288,7 +288,7 @@ fn read_indexes_find_unbalanced (
 fn count_unbalanced_bundles (
 	minimum_chunk_count: u64,
 	maximum_chunk_count: u64,
-	unbalanced_indexes: & [(IndexId, Vec <IndexEntry>)],
+	unbalanced_indexes: & [(IndexId, Vec <RawIndexEntry>)],
 ) -> u64 {
 
 	let unbalanced_bundle_ids: HashSet <BundleId> =
@@ -326,7 +326,7 @@ fn balance_bundles_real (
 	temp_files: & mut TempFileManager,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
-	unbalanced_indexes: Vec <(IndexId, Vec <IndexEntry>)>,
+	unbalanced_indexes: Vec <(IndexId, Vec <RawIndexEntry>)>,
 	new_bundles_total: u64,
 ) -> Result <bool, String> {
 
@@ -346,13 +346,13 @@ fn balance_bundles_real (
 	let mut pending_chunks: Vec <(ChunkId, Vec <u8>)> =
 		Vec::new ();
 
-	let mut pending_index_entries: Vec <IndexEntry> =
+	let mut pending_index_entries: Vec <RawIndexEntry> =
 		Vec::new ();
 
-	let mut index_iterator: vec::IntoIter <(IndexId, Vec <IndexEntry>)> =
+	let mut index_iterator: vec::IntoIter <(IndexId, Vec <RawIndexEntry>)> =
 		unbalanced_indexes.into_iter ();
 
-	let mut index_entry_iterator: vec::IntoIter <IndexEntry> =
+	let mut index_entry_iterator: vec::IntoIter <RawIndexEntry> =
 		Vec::new ().into_iter ();
 
 	enum Task {
@@ -364,7 +364,7 @@ fn balance_bundles_real (
 
 		WriteBundle {
 			output_job: OutputJob,
-			index_entry: IndexEntry,
+			index_entry: RawIndexEntry,
 		},
 
 	}
@@ -673,7 +673,7 @@ fn flush_bundle (
 	repository: & Repository,
 	temp_files: & TempFileManager,
 	bundle_chunks: & Vec <(ChunkId, Vec <u8>)>,
-) -> Result <IndexEntry, String> {
+) -> Result <RawIndexEntry, String> {
 
 	let new_bundle_bytes: Vec <u8> =
 		rand::thread_rng ()
@@ -731,7 +731,7 @@ fn flush_index (
 	output: & Output,
 	repository: & Repository,
 	temp_files: & TempFileManager,
-	new_index_entries: & Vec <IndexEntry>,
+	new_index_entries: & Vec <RawIndexEntry>,
 ) -> Result <(), String> {
 
 	if new_index_entries.is_empty () {

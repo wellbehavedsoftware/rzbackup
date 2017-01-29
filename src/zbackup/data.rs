@@ -115,7 +115,7 @@ pub type EncryptionKey = [u8; KEY_SIZE];
 
 /// A ZBackup index entry. This combined the header with the bundle info, since
 /// generally both of these are needed to make use of the data.
-pub type IndexEntry = (
+pub type RawIndexEntry = (
 	proto::IndexBundleHeader,
 	proto::BundleInfo,
 );

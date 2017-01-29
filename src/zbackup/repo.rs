@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::LinkedList;
-use std::fs;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
@@ -41,6 +40,7 @@ use misc::*;
 use zbackup::bundle_loader::*;
 use zbackup::crypto::*;
 use zbackup::data::*;
+use zbackup::index_cache::*;
 use zbackup::proto;
 use zbackup::randaccess::*;
 use zbackup::read::*;
@@ -59,17 +59,8 @@ pub struct Repository {
 	storage_manager: StorageManager <ChunkId>,
 }
 
-type MasterIndex = HashMap <BundleId, MasterIndexEntry>;
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
 type ChunkCache = LruCache <ChunkId, ChunkData>;
-
-#[ derive (Clone) ]
-pub struct MasterIndexEntryData {
-	pub bundle_id: BundleId,
-	pub size: u64,
-}
-
-pub type MasterIndexEntry = Arc <MasterIndexEntryData>;
 
 /// This controls the configuration of a repository, and is passed to the `open`
 /// constructor.
@@ -139,7 +130,7 @@ type ChunkSharedShared =
 	SharedFuture <BoxFuture <ChunkShared, String>>;
 
 struct RepositoryState {
-	master_index: Option <MasterIndex>,
+	index_cache: IndexCache,
 	bundles_needed: HashSet <BundleId>,
 }
 
@@ -319,7 +310,10 @@ impl Repository {
 
 		let repository_state =
 			Arc::new (Mutex::new (RepositoryState {
-				master_index: None,
+				index_cache: IndexCache::new (
+					repository_path,
+					encryption_key,
+				),
 				bundles_needed: HashSet::new (),
 			}));
 
@@ -353,13 +347,9 @@ impl Repository {
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
-		if self_state.master_index.is_some () {
-			return Ok (());
-		}
-
-		self.load_indexes_real (
-			self_state.deref_mut (),
-			output)
+		self_state.index_cache.load_if_not_loaded (
+			output,
+		)
 
 	}
 
@@ -375,267 +365,9 @@ impl Repository {
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
-		self.load_indexes_real (
-			self_state.deref_mut (),
-			output)
-
-	}
-
-	fn load_indexes_real (
-		& self,
-		self_state: & mut RepositoryState,
-		output: & Output,
-	) -> Result <(), String> {
-
-		struct IndexEntryData {
-			chunk_id: ChunkId,
-			bundle_id: BundleId,
-			size: u64,
-		};
-
-		type IndexLoadResult =
-			BoxFuture <
-				Vec <IndexEntryData>,
-				String,
-			>;
-
-		let output_job =
-			output_job_start! (
-				output,
-				"Scanning bundles");
-
-		let mut bundle_ids: HashSet <BundleId> =
-			HashSet::new ();
-
-		for prefix in (0 .. 256).map (
-			|byte| [ byte as u8 ].to_hex ()
-		) {
-
-			let bundles_directory =
-				self.data.path
-					.join ("bundles")
-					.join (prefix);
-
-			if ! bundles_directory.exists () {
-				continue;
-			}
-
-			for dir_entry_result in (
-				io_result (
-					fs::read_dir (
-						bundles_directory))
-			) ? {
-
-				let dir_entry = (
-					io_result (
-						dir_entry_result)
-				) ?;
-
-				let file_name =
-					dir_entry.file_name ().to_str ().unwrap ().to_owned ();
-
-				match bundle_id_parse (
-					& file_name,
-				) {
-
-					Ok (bundle_id) => {
-
-						bundle_ids.insert (
-							bundle_id);
-
-					},
-
-					Err (_) =>
-						output.message_format (
-							format_args! (
-								"Ignoring invalid bundle name: {}",
-								file_name)),
-
-				}
-
-			}
-
-		}
-
-		output_job_replace! (
-			output_job,
-			"Found {} bundle files",
-			bundle_ids.len ());
-
-		let bundle_ids =
-			Arc::new (
-				bundle_ids);
-
-		let output_job =
-			output_job_start! (
-				output,
-				"Loading indexes");
-
-		// start tasks to load each index
-
-		let mut index_result_futures: Vec <IndexLoadResult> =
-			Vec::new ();
-
-		for dir_entry_or_error in (
-
-			io_result (
-				fs::read_dir (
-					self.data.path.join (
-						"index")))
-
-		) ? {
-
-			let dir_entry =
-				io_result (
-					dir_entry_or_error,
-				) ?;
-
-			let file_name =
-				dir_entry.file_name ();
-
-			let index_name =
-				file_name.to_str ().unwrap ().to_owned ();
-
-			let self_clone =
-				self.clone ();
-
-			let bundle_ids =
-				bundle_ids.clone ();
-
-			index_result_futures.push (
-				self.cpu_pool.spawn_fn (
-					move || {
-
-				let index =
-					string_result_with_prefix (
-						|| format! (
-							"Error loading index {}",
-							index_name),
-						read_index (
-							self_clone.data.path
-								.join ("index")
-								.join (& index_name),
-							self_clone.data.encryption_key)
-					) ?;
-
-				let mut entries: Vec <IndexEntryData> =
-					Vec::new ();
-
-				for (index_bundle_header, bundle_info) in index {
-
-					let bundle_id =
-						to_array_24 (
-							index_bundle_header.get_id ());
-
-					if ! bundle_ids.contains (& bundle_id) {
-						continue;
-					}
-
-					for chunk_record in bundle_info.get_chunk_record () {
-
-						entries.push (
-							IndexEntryData {
-
-							chunk_id:
-								to_array_24 (
-									chunk_record.get_id ()),
-
-							bundle_id:
-								bundle_id,
-
-							size:
-								chunk_record.get_size () as u64,
-
-						});
-
-					}
-
-				}
-
-				Ok (entries)
-
-			}).boxed ());
-
-		}
-
-		let num_indexes =
-			index_result_futures.len () as u64;
-
-		// construct index as they complete
-
-		let mut count: u64 = 0;
-		let mut error_count: u64 = 0;
-
-		let mut master_index: MasterIndex =
-			HashMap::new ();
-
-		for index_result_future in index_result_futures {
-
-			match index_result_future.wait () {
-
-				Ok (index_entries) => {
-
-					for index_entry in index_entries {
-
-						master_index.insert (
-
-							index_entry.chunk_id,
-
-							Arc::new (MasterIndexEntryData {
-								bundle_id: index_entry.bundle_id,
-								size: index_entry.size,
-							}),
-
-						);
-
-					}
-
-					count += 1;
-
-				},
-
-				Err (error) => {
-
-					output.message (
-						error);
-
-					error_count += 1;
-
-				},
-
-			}
-
-			if count & 0x3f == 0x3f {
-
-				output_job.progress (
-					count as u64,
-					num_indexes as u64);
-
-			}
-
-		}
-
-		output_job_replace! (
-			output_job,
-			"Loaded {} indexes",
-			count);
-
-		if error_count > 0 {
-
-			output_message! (
-				output,
-				"{} index files not loaded due to errors",
-				error_count);
-
-		}
-
-		// store the result and return
-
-		self_state.master_index =
-			Some (
-				master_index);
-
-		Ok (())
+		self_state.index_cache.reload (
+			output,
+		)
 
 	}
 
@@ -1236,7 +968,7 @@ impl Repository {
 		let mut self_state =
 			self.state.lock ().unwrap ();
 
-		if self_state.master_index.is_none () {
+		if ! self_state.index_cache.loaded () {
 
 			panic! (
 				"Must load indexes before getting chunks");
@@ -1290,36 +1022,26 @@ impl Repository {
 		chunk_id: ChunkId,
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
-		// get bundle id
-
-		let bundle_id = match (
-
-			self_state.master_index.as_ref ().unwrap ().get (
-				& chunk_id,
-			).clone ()
-
+		match self_state.index_cache.get (
+			chunk_id,
 		) {
 
 			Some (index_entry) =>
-				index_entry.bundle_id,
+				self.load_chunk_async_async_impl (
+					debug,
+					self_state,
+					chunk_id,
+					index_entry.bundle_id (),
+				),
 
-			None => {
-
-				return futures::failed (
+			None =>
+				futures::failed (
 					format! (
 						"Missing chunk: {}",
 						chunk_id.to_hex ()),
-				).boxed ();
+				).boxed (),
 
-			},
-
-		};
-
-		self.load_chunk_async_async_impl (
-			debug,
-			self_state,
-			chunk_id,
-			bundle_id)
+		}
 
 	}
 
@@ -1408,24 +1130,20 @@ impl Repository {
 	pub fn get_index_entry (
 		& self,
 		chunk_id: ChunkId,
-	) -> Result <MasterIndexEntry, String> {
+	) -> Result <IndexEntry, String> {
 
 		let self_state =
 			self.state.lock ().unwrap ();
 
-		if self_state.master_index.is_none () {
+		if ! self_state.index_cache.loaded () {
 
 			panic! (
 				"Must load indexes before getting index entries");
 
 		}
 
-		match (
-
-			self_state.master_index.as_ref ().unwrap ().get (
-				& chunk_id,
-			).clone ()
-
+		match self_state.index_cache.get (
+			chunk_id,
 		) {
 
 			Some (value) =>
@@ -1452,15 +1170,15 @@ impl Repository {
 		let self_state =
 			self.state.lock ().unwrap ();
 
-		if self_state.master_index.is_none () {
+		if ! self_state.index_cache.loaded () {
 
 			panic! (
 				"Must load indexes before getting index entries");
 
 		}
 
-		self_state.master_index.as_ref ().unwrap ().get (
-			& chunk_id,
+		self_state.index_cache.get (
+			chunk_id,
 		).is_some ()
 
 	}
