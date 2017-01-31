@@ -4,7 +4,7 @@ use std::io::Cursor;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crypto::sha1::Sha1;
+use rust_crypto::sha1::Sha1;
 
 use output::Output;
 
@@ -12,13 +12,10 @@ use protobuf::stream::CodedInputStream;
 
 use rustc_serialize::hex::ToHex;
 
-use ::Repository;
-use ::TempFileManager;
 use ::misc::*;
 use ::zbackup::data::*;
-use ::zbackup::proto;
-use ::zbackup::read::*;
-use ::zbackup::write::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::*;
 
 pub fn scan_index_files <
 	RepositoryPath: AsRef <Path>,
@@ -50,15 +47,9 @@ pub fn scan_index_files <
 
 		) ?;
 
-		let file_name =
-			dir_entry.file_name ();
-
-		let index_name =
-			file_name.to_string_lossy ();
-
 		let index_id =
-			index_id_parse (
-				index_name.as_ref (),
+			IndexId::parse (
+				dir_entry.file_name ().to_string_lossy (),
 			) ?;
 
 		index_ids.push (
@@ -107,15 +98,9 @@ pub fn scan_index_files_with_sizes <
 				dir_entry_result,
 			) ?;
 
-		let file_name =
-			dir_entry.file_name ();
-
-		let index_name =
-			file_name.to_string_lossy ();
-
 		let index_id =
-			index_id_parse (
-				index_name.as_ref (),
+			IndexId::parse (
+				dir_entry.file_name ().to_string_lossy (),
 			) ?;
 
 		let index_metadata =
@@ -267,8 +252,8 @@ pub fn scan_bundle_files <
 			let bundle_name =
 				file_name.to_string_lossy ();
 
-			match bundle_id_parse (
-				bundle_name.as_ref (),
+			match BundleId::parse (
+				& bundle_name,
 			) {
 
 				Ok (bundle_id) =>
@@ -334,8 +319,8 @@ pub fn scan_bundle_files_with_sizes <
 				file_name.to_string_lossy ();
 
 			let bundle_id =
-				bundle_id_parse (
-					bundle_name.as_ref (),
+				BundleId::parse (
+					bundle_name,
 				) ?;
 
 			let bundle_metadata =
@@ -365,22 +350,22 @@ pub fn scan_bundle_files_with_sizes <
 pub fn flush_index_entries (
 	output: & Output,
 	repository: & Repository,
-	temp_files: & TempFileManager,
+	atomic_file_writer: & AtomicFileWriter,
 	index_entries_buffer: & Vec <RawIndexEntry>,
 ) -> Result <IndexId, String> {
 
 	let index_id =
-		index_id_generate ();
+		IndexId::random ();
 
 	let output_job =
 		output_job_start! (
 			output,
 			"Writing index {}",
-			index_id.to_hex ());
+			index_id);
 
-	write_index_auto (
-		repository,
-		temp_files,
+	index_write_auto (
+		repository.core (),
+		atomic_file_writer,
 		& index_entries_buffer,
 	) ?;
 
@@ -399,7 +384,7 @@ pub fn collect_chunks_from_backup (
 	// load backup
 
 	let backup_info =
-		read_backup_file (
+		backup_read_path (
 			repository.path ()
 				.join ("backups")
 				.join (backup_name),
@@ -410,16 +395,16 @@ pub fn collect_chunks_from_backup (
 
 	collect_chunks_from_instructions (
 		chunk_ids,
-		& backup_info.get_backup_data (),
+		& backup_info.backup_data (),
 	) ?;
 
 	// expand backup data
 
 	let mut input =
 		Cursor::new (
-			backup_info.get_backup_data ().to_owned ());
+			backup_info.backup_data ().to_owned ());
 
-	for _iteration in 0 .. backup_info.get_iterations () {
+	for _iteration in 0 .. backup_info.iterations () {
 
 		let mut temp_output: Cursor <Vec <u8>> =
 			Cursor::new (
@@ -474,18 +459,15 @@ pub fn collect_chunks_from_instructions (
 		coded_input_stream.eof (),
 	) ? {
 
-		let backup_instruction: proto::BackupInstruction =
-			read_message (
+		let backup_instruction =
+			DiskBackupInstruction::read (
 				& mut coded_input_stream,
-				|| format! (
-					"backup instruction"),
 			) ?;
 
 		if backup_instruction.has_chunk_to_emit () {
 
 			chunk_ids.insert (
-				to_array_24 (
-					backup_instruction.get_chunk_to_emit ()));
+				backup_instruction.chunk_to_emit ());
 
 		}
 

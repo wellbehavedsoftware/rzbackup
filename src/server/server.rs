@@ -11,8 +11,7 @@ use output::Output;
 
 pub use server::handler::handle_client;
 
-use ::Repository;
-use ::RepositoryConfig;
+use ::zbackup::repository::*;
 use ::misc::*;
 
 pub fn run_server (

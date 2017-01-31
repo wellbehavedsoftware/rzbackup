@@ -91,9 +91,19 @@ impl <Target: Write> CloseableWrite for CloseableWriter <Target> {
 	fn close (
 		& mut self,
 	) -> Result <(), io::Error> {
-
 		self.flush ()
+	}
 
+}
+
+impl <
+	CloseableWriteSized: CloseableWrite + ?Sized
+> CloseableWrite for Box <CloseableWriteSized> {
+
+	fn close (
+		& mut self,
+	) -> Result <(), io::Error> {
+		(** self).close ()
 	}
 
 }

@@ -6,11 +6,10 @@ use clap;
 use output::Output;
 
 use ::RawIndexEntry;
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
-use ::read::*;
+use zbackup::disk_format::*;
+use zbackup::repository::Repository;
 
 pub fn balance_indexes (
 	output: & Output,
@@ -33,8 +32,8 @@ pub fn balance_indexes (
 
 	// begin transaction
 
-	let mut temp_files =
-		TempFileManager::new (
+	let atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -82,9 +81,10 @@ pub fn balance_indexes (
 
 		for old_index_entry in (
 
-			read_index (
+			index_read_path (
 				& old_index_path,
-				repository.encryption_key ())
+				repository.encryption_key (),
+			)
 
 		) ? {
 
@@ -101,7 +101,7 @@ pub fn balance_indexes (
 				flush_index_entries (
 					output,
 					& repository,
-					& temp_files,
+					& atomic_file_writer,
 					& index_entries,
 				) ?;
 
@@ -109,7 +109,7 @@ pub fn balance_indexes (
 
 		}
 
-		temp_files.delete (
+		atomic_file_writer.delete (
 			old_index_path);
 
 		balanced_index_size +=
@@ -126,7 +126,7 @@ pub fn balance_indexes (
 		flush_index_entries (
 			output,
 			& repository,
-			& mut temp_files,
+			& atomic_file_writer,
 			& mut entries_buffer,
 		) ?;
 
@@ -141,7 +141,7 @@ pub fn balance_indexes (
 			output,
 			"Committing changes");
 
-	temp_files.commit () ?;
+	atomic_file_writer.commit () ?;
 
 	output_job.complete ();
 

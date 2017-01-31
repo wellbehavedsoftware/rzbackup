@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures;
@@ -15,9 +14,10 @@ use output::Output;
 
 use rustc_serialize::hex::ToHex;
 
-use ::misc::*;
+use misc::*;
 use zbackup::data::*;
-use zbackup::read::*;
+use zbackup::disk_format::*;
+use zbackup::repository_core::*;
 
 #[ derive (Clone) ]
 pub struct IndexEntryData {
@@ -42,13 +42,8 @@ impl IndexEntryData {
 pub type IndexEntry = Arc <IndexEntryData>;
 
 pub struct IndexCache {
-	config: Arc <IndexCacheConfig>,
-	entries: Option <HashMap <BundleId, IndexEntry>>,
-}
-
-struct IndexCacheConfig {
-	repository_path: PathBuf,
-	encryption_key: Option <EncryptionKey>,
+	repository_core: Arc <RepositoryCore>,
+	entries: Option <HashMap <ChunkId, IndexEntry>>,
 }
 
 type IndexLoadFuture =
@@ -60,30 +55,12 @@ type IndexLoadFuture =
 impl IndexCache {
 
 	#[ inline ]
-	pub fn new <
-		RepositoryPath: Into <PathBuf>,
-	> (
-		repository_path: RepositoryPath,
-		encryption_key: Option <EncryptionKey>,
-	) -> IndexCache {
-
-		Self::new_impl (
-			repository_path.into (),
-			encryption_key,
-		)
-
-	}
-
-	fn new_impl (
-		repository_path: PathBuf,
-		encryption_key: Option <EncryptionKey>,
+	pub fn new (
+		repository_core: Arc <RepositoryCore>,
 	) -> IndexCache {
 
 		IndexCache {
-			config: Arc::new (IndexCacheConfig {
-				repository_path: repository_path,
-				encryption_key: encryption_key,
-			}),
+			repository_core: repository_core,
 			entries: None,
 		}
 
@@ -155,7 +132,7 @@ impl IndexCache {
 		output: & Output,
 		bundle_ids: Arc <HashSet <BundleId>>,
 		index_ids: & Vec <IndexId>,
-	) -> Result <HashMap <IndexId, IndexEntry>, String> {
+	) -> Result <HashMap <ChunkId, IndexEntry>, String> {
 
 		let output_job =
 			output_job_start! (
@@ -201,7 +178,7 @@ impl IndexCache {
 
 					index_futures.push (
 						Self::load_index_future (
-							self.config.clone (),
+							self.repository_core.clone (),
 							output,
 							& cpu_pool,
 							bundle_ids.clone (),
@@ -261,7 +238,7 @@ impl IndexCache {
 					output_message! (
 						output,
 						"Error loading index {}: {}",
-						index_id.to_hex (),
+						index_id,
 						error);
 
 					num_indexes_error += 1;
@@ -300,7 +277,7 @@ impl IndexCache {
 	}
 
 	fn load_index_future (
-		config: Arc <IndexCacheConfig>,
+		repository_core: Arc <RepositoryCore>,
 		output: & Output,
 		cpu_pool: & CpuPool,
 		bundle_ids: Arc <HashSet <BundleId>>,
@@ -308,15 +285,14 @@ impl IndexCache {
 	) -> IndexLoadFuture {
 
 		let index_path =
-			config.repository_path
-				.join ("index")
-				.join (index_id.to_hex ());
+			repository_core.index_path (
+				index_id);
 
 		let output_job =
 			output_job_start! (
 				output,
 				"Loading index {}",
-				index_id.to_hex ());
+				index_id);
 
 		cpu_pool.spawn_fn (move || {
 
@@ -324,33 +300,34 @@ impl IndexCache {
 				string_result_with_prefix (
 					|| format! (
 						"Error loading index {}",
-						index_id.to_hex ()),
-					read_index (
+						index_id),
+					index_read_path (
 						index_path,
-						config.encryption_key),
+						repository_core.encryption_key ()),
 				) ?;
 
-			let mut raw_entries: Vec <(IndexId, IndexEntryData)> =
+			let mut raw_entries: Vec <(ChunkId, IndexEntryData)> =
 				Vec::new ();
 
-			for (index_bundle_header, bundle_info) in index_data {
+			for RawIndexEntry {
+				index_bundle_header,
+				bundle_info,
+			} in index_data {
 
 				let bundle_id =
-					to_array_24 (
-						index_bundle_header.get_id ());
+					index_bundle_header.bundle_id ();
 
 				if ! bundle_ids.contains (& bundle_id) {
 					continue;
 				}
 
-				for chunk_record in bundle_info.get_chunk_record () {
+				for chunk in bundle_info.chunks () {
 
 					raw_entries.push ((
-						to_array_24 (
-							chunk_record.get_id ()),
+						chunk.chunk_id (),
 						IndexEntryData {
 							bundle_id: bundle_id,
-							size: chunk_record.get_size () as u64,
+							size: chunk.size () as u64,
 						},
 					));
 
@@ -394,7 +371,7 @@ impl IndexCache {
 		) {
 
 			let bundles_directory =
-				self.config.repository_path
+				self.repository_core.path ()
 					.join ("bundles")
 					.join (prefix);
 
@@ -413,11 +390,8 @@ impl IndexCache {
 						dir_entry_result)
 				) ?;
 
-				let file_name =
-					dir_entry.file_name ().to_str ().unwrap ().to_owned ();
-
-				match bundle_id_parse (
-					& file_name,
+				match BundleId::parse (
+					dir_entry.file_name ().to_str ().unwrap (),
 				) {
 
 					Ok (bundle_id) => {
@@ -431,7 +405,7 @@ impl IndexCache {
 						output.message_format (
 							format_args! (
 								"Ignoring invalid bundle name: {}",
-								file_name)),
+								dir_entry.file_name ().to_string_lossy ())),
 
 				}
 
@@ -465,8 +439,8 @@ impl IndexCache {
 
 			io_result (
 				fs::read_dir (
-					self.config.repository_path.join (
-						"index")))
+					self.repository_core.path ()
+						.join ("index")))
 
 		) ? {
 
@@ -479,8 +453,9 @@ impl IndexCache {
 				dir_entry.file_name ().to_str () {
 
 				if let Ok (index_id) =
-					index_id_parse (
-						index_filename) {
+					IndexId::parse (
+						index_filename,
+					) {
 
 					index_ids.push (
 						index_id);
@@ -516,11 +491,11 @@ impl IndexCache {
 
 	pub fn get (
 		& self,
-		chunk_id: ChunkId,
+		chunk_id: & ChunkId,
 	) -> Option <IndexEntry> {
 
 		self.entries.as_ref ().unwrap ().get (
-			& chunk_id,
+			chunk_id,
 		).map (
 			|index_entry|
 

@@ -6,8 +6,8 @@ use clap;
 
 use output::Output;
 
-use ::CryptoReader;
-use ::Repository;
+use zbackup::crypto::CryptoReader;
+use zbackup::repository::Repository;
 use ::misc::*;
 
 pub fn do_decrypt (

@@ -2,14 +2,14 @@
 
 pub mod utils;
 
-mod balancebundles;
-mod balanceindexes;
-mod checkbackups;
-mod checkbundles;
-mod checkindexes;
-mod gcbundles;
-mod gcindexes;
-mod rebuildindexes;
+mod balance_bundles;
+mod balance_indexes;
+mod check_backups;
+mod check_bundles;
+mod check_indexes;
+mod gc_bundles;
+mod gc_indexes;
+mod rebuild_indexes;
 
 // import project dependencies
 
@@ -17,14 +17,14 @@ use ::misc::*;
 
 // import own dependencies
 
-pub use self::balancebundles::*;
-pub use self::balanceindexes::*;
-pub use self::checkbackups::*;
-pub use self::checkbundles::*;
-pub use self::checkindexes::*;
-pub use self::gcbundles::*;
-pub use self::gcindexes::*;
-pub use self::rebuildindexes::*;
+pub use self::balance_bundles::*;
+pub use self::balance_indexes::*;
+pub use self::check_backups::*;
+pub use self::check_bundles::*;
+pub use self::check_indexes::*;
+pub use self::gc_bundles::*;
+pub use self::gc_indexes::*;
+pub use self::rebuild_indexes::*;
 
 // commands
 

@@ -23,14 +23,11 @@ use rand::Rng;
 
 use rustc_serialize::hex::ToHex;
 
-use ::Repository;
-use ::TempFileManager;
+use zbackup::repository::Repository;
 use ::convert::utils::*;
 use ::misc::*;
-use ::read::*;
-use ::write::*;
 use ::zbackup::data::*;
-use ::zbackup::proto;
+use ::zbackup::disk_format::*;
 
 pub fn balance_bundles (
 	output: & Output,
@@ -69,8 +66,8 @@ pub fn balance_bundles (
 
 			// begin transaction
 
-			let mut temp_files =
-				TempFileManager::new (
+			let atomic_file_writer =
+				AtomicFileWriter::new (
 					output,
 					& arguments.repository_path,
 					Some (arguments.sleep_time),
@@ -128,7 +125,7 @@ pub fn balance_bundles (
 				& cpu_pool,
 				num_threads,
 				& repository,
-				& mut temp_files,
+				& atomic_file_writer,
 				& arguments,
 				minimum_chunk_count,
 				unbalanced_indexes,
@@ -207,40 +204,40 @@ fn read_indexes_find_unbalanced (
 				old_index_id);
 
 		let old_index_entries =
-			read_index (
+			index_read_path (
 				& old_index_path,
 				repository.encryption_key (),
 			) ?;
 
-		for & (
-			ref old_index_bundle_index_header,
-			ref _old_index_bundle_info,
-		) in old_index_entries.iter () {
-
-			let bundle_id =
-				to_array_24 (
-					old_index_bundle_index_header.get_id ());
+		for & RawIndexEntry {
+			index_bundle_header: ref old_index_bundle_header,
+			..
+		} in old_index_entries.iter () {
 
 			if seen_bundle_ids.contains (
-				& bundle_id) {
+				& old_index_bundle_header.bundle_id ()) {
 
 				return Err (
 					format! (
 						"Duplicated bundle id in index: {}",
-						bundle_id.to_hex ()));
+						old_index_bundle_header.bundle_id ()));
 
 			}
 
 			seen_bundle_ids.insert (
-				bundle_id);
+				old_index_bundle_header.bundle_id (),
+			);
 
 		}
 
 		let old_index_unbalanced_chunks_count =
 			old_index_entries.iter ().map (
-				|& (_, ref bundle_info)|
+				|& RawIndexEntry {
+					index_bundle_header: ref _old_index_bundle_header,
+					bundle_info: ref old_index_bundle_info,
+				}|
 
-				bundle_info.get_chunk_record ().len () as u64
+				old_index_bundle_info.num_chunks ()
 
 			).filter (
 				|& chunk_count|
@@ -296,19 +293,21 @@ fn count_unbalanced_bundles (
 			|& (ref _index_id, ref index_entries)|
 
 			index_entries.iter ().filter (
-				|&& (ref _index_bundle_header, ref bundle_info)| {
+				|&& RawIndexEntry {
+					ref bundle_info,
+					..
+				}| {
 
-				let chunk_count =
-					bundle_info.get_chunk_record ().len () as u64;
-
-				chunk_count < minimum_chunk_count
-				|| chunk_count > maximum_chunk_count
+				bundle_info.num_chunks () < minimum_chunk_count
+				|| bundle_info.num_chunks () > maximum_chunk_count
 
 			}).map (
-				|& (ref index_bundle_header, ref _bundle_info)|
+				|& RawIndexEntry {
+					ref index_bundle_header,
+					..
+				}|
 
-				to_array_24 (
-					index_bundle_header.get_id ())
+				index_bundle_header.bundle_id ()
 
 			)
 
@@ -323,7 +322,7 @@ fn balance_bundles_real (
 	cpu_pool: & CpuPool,
 	max_tasks: usize,
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
+	atomic_file_writer: & AtomicFileWriter,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
 	unbalanced_indexes: Vec <(IndexId, Vec <RawIndexEntry>)>,
@@ -393,7 +392,7 @@ fn balance_bundles_real (
 				& mut pending_chunks);
 
 			let repository = repository.clone ();
-			let temp_files = temp_files.clone ();
+			let atomic_file_writer = atomic_file_writer.clone ();
 
 			let output_job_write_bundle =
 				output_job_start! (
@@ -408,7 +407,7 @@ fn balance_bundles_real (
 				flush_bundle (
 					& output_job_write_bundle,
 					& repository,
-					& temp_files,
+					atomic_file_writer,
 					& bundle_chunks,
 				).map (
 					|index_entry|
@@ -431,35 +430,31 @@ fn balance_bundles_real (
 		while task_futures.len () < max_tasks
 		&& now < checkpoint_time {
 
-			if let Some ((index_bundle_header, bundle_info)) =
-				index_entry_iterator.next () {
+			if let Some (RawIndexEntry {
+				index_bundle_header,
+				bundle_info,
+			}) = index_entry_iterator.next () {
 
-				let bundle_chunks =
-					bundle_info.get_chunk_record ().len () as u64;
+				if bundle_info.num_chunks ()
+					>= minimum_chunk_count
 
-				if bundle_chunks >= minimum_chunk_count
-					&& bundle_chunks <= arguments.chunks_per_bundle {
+				&& bundle_info.num_chunks ()
+					<= arguments.chunks_per_bundle {
 
-					pending_index_entries.push ((
-						index_bundle_header,
-						bundle_info,
-					));
+					pending_index_entries.push (
+						RawIndexEntry {
+							index_bundle_header: index_bundle_header,
+							bundle_info: bundle_info,
+						}
+					);
 
 				} else {
 
-					let bundle_id =
-						index_bundle_header.get_id ().to_owned ();
-
-					let bundle_id_hex =
-						bundle_id.to_hex ();
-
 					let bundle_path =
-						repository.path ()
-							.join ("bundles")
-							.join (& bundle_id_hex [0 .. 2])
-							.join (& bundle_id_hex);
+						repository.bundle_path (
+							index_bundle_header.bundle_id ());
 
-					temp_files.delete (
+					atomic_file_writer.delete (
 						bundle_path.clone ());
 
 					let encryption_key =
@@ -469,13 +464,13 @@ fn balance_bundles_real (
 						output_job_start! (
 							output,
 							"Reading bundle {}",
-							bundle_id.to_hex ());
+							index_bundle_header.bundle_id ());
 
 					task_futures.push (
 						cpu_pool.spawn_fn (move || {
 
 						let bundle_chunks =
-							read_bundle (
+							bundle_read_path (
 								& bundle_path,
 								encryption_key,
 							) ?;
@@ -492,7 +487,7 @@ fn balance_bundles_real (
 			} else if let Some ((index_id, index_entries)) =
 				index_iterator.next () {
 
-				temp_files.delete (
+				atomic_file_writer.delete (
 					repository.index_path (
 						index_id));
 
@@ -586,7 +581,7 @@ fn balance_bundles_real (
 			flush_bundle (
 				& output_job_final_bundle,
 				& repository,
-				& temp_files,
+				atomic_file_writer.clone (),
 				& pending_chunks,
 			) ?
 		);
@@ -620,7 +615,7 @@ fn balance_bundles_real (
 				flush_bundle (
 					& output_job_checkpoint,
 					& repository,
-					& temp_files,
+					atomic_file_writer.clone (),
 					& pending_chunks,
 				) ?
 			);
@@ -643,7 +638,7 @@ fn balance_bundles_real (
 	flush_index (
 		output,
 		& repository,
-		temp_files,
+		& atomic_file_writer,
 		& pending_index_entries,
 	) ?;
 
@@ -656,7 +651,7 @@ fn balance_bundles_real (
 				output,
 				"Comitting changes");
 
-		temp_files.commit () ?;
+		atomic_file_writer.commit () ?;
 
 		output_job_commit.remove ();
 
@@ -671,18 +666,15 @@ fn balance_bundles_real (
 fn flush_bundle (
 	output_job: & OutputJob,
 	repository: & Repository,
-	temp_files: & TempFileManager,
+	atomic_file_writer: AtomicFileWriter,
 	bundle_chunks: & Vec <(ChunkId, Vec <u8>)>,
 ) -> Result <RawIndexEntry, String> {
 
-	let new_bundle_bytes: Vec <u8> =
-		rand::thread_rng ()
-			.gen_iter::<u8> ()
-			.take (24)
-			.collect ();
+	let new_bundle_id =
+		BundleId::random ();
 
-	let new_bundle_name: String =
-		new_bundle_bytes.to_hex ();
+	let new_bundle_name =
+		new_bundle_id.to_string ();
 
 	let new_bundle_path =
 		repository.path ()
@@ -690,9 +682,9 @@ fn flush_bundle (
 			.join (& new_bundle_name [0 .. 2])
 			.join (& new_bundle_name);
 
-	let new_bundle_file =
+	let mut new_bundle_file =
 		Box::new (
-			temp_files.create (
+			atomic_file_writer.create (
 				new_bundle_path,
 			) ?
 		);
@@ -701,11 +693,11 @@ fn flush_bundle (
 		bundle_chunks.len () as u64;
 
 	let new_index_bundle_info =
-		write_bundle (
-			new_bundle_file,
+		bundle_write_direct (
+			& mut new_bundle_file,
 			repository.encryption_key (),
 			& bundle_chunks,
-			|chunks_written| {
+			move |chunks_written| {
 
 				output_job.progress (
 					chunks_written,
@@ -714,23 +706,21 @@ fn flush_bundle (
 			}
 		) ?;
 
-	let mut new_index_bundle_header =
-		proto::IndexBundleHeader::new ();
+	let new_index_bundle_header =
+		DiskIndexBundleHeader::new (
+			new_bundle_id);
 
-	new_index_bundle_header.set_id (
-		new_bundle_bytes);
-
-	Ok ((
-		new_index_bundle_header,
-		new_index_bundle_info,
-	))
+	Ok (RawIndexEntry {
+		index_bundle_header: new_index_bundle_header,
+		bundle_info: new_index_bundle_info,
+	})
 
 }
 
 fn flush_index (
 	output: & Output,
 	repository: & Repository,
-	temp_files: & TempFileManager,
+	atomic_file_writer: & AtomicFileWriter,
 	new_index_entries: & Vec <RawIndexEntry>,
 ) -> Result <(), String> {
 
@@ -757,15 +747,13 @@ fn flush_index (
 			.join ("index")
 			.join (& new_index_name);
 
-	let new_index_file =
-		Box::new (
-			temp_files.create (
-				new_index_path,
-			) ?
-		);
+	let mut new_index_file =
+		atomic_file_writer.create (
+			new_index_path,
+		) ?;
 
-	write_index (
-		new_index_file,
+	index_write_direct (
+		& mut new_index_file,
 		repository.encryption_key (),
 		& new_index_entries,
 	) ?;

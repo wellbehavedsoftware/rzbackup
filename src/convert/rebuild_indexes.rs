@@ -14,23 +14,18 @@ use num_cpus;
 use output::Output;
 use output::OutputJob;
 
-use rustc_serialize::hex::ToHex;
-
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
-use ::read::*;
 use ::zbackup::data::*;
-use ::zbackup::proto;
-use ::zbackup::write::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::*;
 
 enum TaskResult {
 
 	ReadBundle {
 		output_job: OutputJob,
 		bundle_id: BundleId,
-		bundle_info: proto::BundleInfo,
+		bundle_info: DiskBundleInfo,
 	},
 
 	WriteIndex {
@@ -97,8 +92,8 @@ impl <'a> IndexRebuilder <'a> {
 
 		// begin transaction
 
-		let mut temp_files =
-			TempFileManager::new (
+		let atomic_file_writer =
+			AtomicFileWriter::new (
 				output,
 				& self.arguments.repository_path,
 				None,
@@ -154,13 +149,13 @@ impl <'a> IndexRebuilder <'a> {
 						output_job_start! (
 							output,
 							"Reading bundle {}",
-							bundle_id.to_hex ());
+							bundle_id);
 
 					task_futures.push (
 						self.cpu_pool.spawn_fn (move || {
 
 							let bundle_info =
-								read_bundle_info (
+								bundle_info_read_path (
 									repository.bundle_path (
 										bundle_id),
 									repository.encryption_key (),
@@ -215,17 +210,17 @@ impl <'a> IndexRebuilder <'a> {
 						bundle_count,
 						bundle_total);
 
-					let mut index_bundle_header =
-						proto::IndexBundleHeader::new ();
-
-					index_bundle_header.set_id (
-						bundle_id.to_vec ());
-
 					entries_buffer.push (
-						(
-							index_bundle_header,
-							bundle_info,
-						)
+						RawIndexEntry {
+
+							index_bundle_header:
+								DiskIndexBundleHeader::new (
+									bundle_id),
+
+							bundle_info:
+								bundle_info,
+
+						}
 					);
 
 					// write out a new index
@@ -239,8 +234,8 @@ impl <'a> IndexRebuilder <'a> {
 						let repository =
 							self.repository.clone ();
 
-						let temp_files =
-							temp_files.clone ();
+						let atomic_file_writer =
+							atomic_file_writer.clone ();
 
 						let index_entries =
 							mem::replace (
@@ -248,20 +243,20 @@ impl <'a> IndexRebuilder <'a> {
 								Vec::new ());
 
 						let index_id =
-							index_id_generate ();
+							IndexId::random ();
 
 						let output_job_write_index =
 							output_job_start! (
 								output,
 								"Writing index {}",
-								index_id.to_hex ());
+								index_id);
 
 						task_futures.push (
 							self.cpu_pool.spawn_fn (move || {
 
-								write_index_with_id (
-									& repository,
-									& temp_files,
+								index_write_with_id (
+									& repository.core (),
+									& atomic_file_writer,
 									index_id,
 									& index_entries,
 								) ?;
@@ -300,7 +295,7 @@ impl <'a> IndexRebuilder <'a> {
 			flush_index_entries (
 				output,
 				& self.repository,
-				& mut temp_files,
+				& atomic_file_writer,
 				& mut entries_buffer,
 			) ?;
 
@@ -325,7 +320,7 @@ impl <'a> IndexRebuilder <'a> {
 
 		for old_index_id in old_index_ids {
 
-			temp_files.delete (
+			atomic_file_writer.delete (
 				self.repository.index_path (
 					old_index_id));
 
@@ -340,7 +335,7 @@ impl <'a> IndexRebuilder <'a> {
 				output,
 				"Committing changes");
 
-		temp_files.commit () ?;
+		atomic_file_writer.commit () ?;
 
 		output_job_commit.remove ();
 

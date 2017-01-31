@@ -2,13 +2,13 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crypto;
-use crypto::mac::Mac;
-use crypto::symmetriccipher::BlockDecryptor;
+use rust_crypto;
+use rust_crypto::mac::Mac;
+use rust_crypto::symmetriccipher::BlockDecryptor;
 
 use ::misc::*;
-use zbackup::data::*;
-use zbackup::proto;
+use ::zbackup::data::*;
+use ::zbackup::disk_format::*;
 
 /// This implements the decryption and verification of a ZBackup encryption key,
 /// from the `EncryptionKeyInfo` and the password file. This will normally be
@@ -20,8 +20,8 @@ pub fn decrypt_key <
 	PasswordFilePath: AsRef <Path>,
 > (
 	password_file_path: PasswordFilePath,
-	encryption_key: & proto::EncryptionKeyInfo,
-) -> Result <Option <[u8; KEY_SIZE]>, String> {
+	encryption_key: DiskEncryptionKeyInfoRef,
+) -> Result <Option <EncryptionKey>, String> {
 
 	decrypt_key_impl (
 		password_file_path.as_ref (),
@@ -32,8 +32,8 @@ pub fn decrypt_key <
 
 fn decrypt_key_impl (
 	password_file_path: & Path,
-	encryption_key: & proto::EncryptionKeyInfo,
-) -> Result <Option <[u8; KEY_SIZE]>, String> {
+	encryption_key_info: DiskEncryptionKeyInfoRef,
+) -> Result <Option <EncryptionKey>, String> {
 
 	// read password from file
 
@@ -69,41 +69,41 @@ fn decrypt_key_impl (
 	// derive password key from password
 
 	let mut password_hmac =
-		crypto::hmac::Hmac::new (
-			crypto::sha1::Sha1::new (),
+		rust_crypto::hmac::Hmac::new (
+			rust_crypto::sha1::Sha1::new (),
 			password_bytes);
 
 	let mut password_result =
 		[0u8; KEY_SIZE];
 
-	crypto::pbkdf2::pbkdf2 (
+	rust_crypto::pbkdf2::pbkdf2 (
 		& mut password_hmac,
-		encryption_key.get_salt (),
-		encryption_key.get_rounds (),
+		encryption_key_info.salt (),
+		encryption_key_info.rounds (),
 		& mut password_result);
 
 	// decrypt actual key using password key
 
 	let key_decryptor =
-		crypto::aessafe::AesSafe128Decryptor::new (
+		rust_crypto::aessafe::AesSafe128Decryptor::new (
 			& password_result);
 
 	let mut key_result =
 		[0u8; KEY_SIZE];
 
 	key_decryptor.decrypt_block (
-		& encryption_key.get_encrypted_key (),
+		& encryption_key_info.encrypted_key (),
 		& mut key_result);
 
 	// derive check result to verify password
 
 	let mut check_hmac =
-		crypto::hmac::Hmac::new (
-			crypto::sha1::Sha1::new (),
+		rust_crypto::hmac::Hmac::new (
+			rust_crypto::sha1::Sha1::new (),
 			& key_result);
 
 	check_hmac.input (
-		encryption_key.get_key_check_input ());
+		encryption_key_info.key_check_input ());
 
 	let mut check_result =
 		[0u8; HMAC_SIZE];
@@ -113,7 +113,7 @@ fn decrypt_key_impl (
 
 	// return
 
-	if check_result == encryption_key.get_key_check_hmac () {
+	if check_result == encryption_key_info.key_check_hmac () {
 
 		Ok (Some (
 			key_result

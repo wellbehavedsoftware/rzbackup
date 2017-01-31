@@ -9,21 +9,17 @@ use std::sync::Arc;
 
 use output::Output;
 
-use protobuf;
 use protobuf::stream::CodedInputStream;
-
-use rustc_serialize::hex::ToHex;
 
 use ::misc::*;
 
-use zbackup::proto;
-use zbackup::repo::Repository;
+use zbackup::data::*;
+use zbackup::disk_format::*;
+use zbackup::repository::Repository;
 
 enum InstructionRefContent {
-
-	Chunk ([u8; 24]),
+	Chunk (ChunkId),
 	Bytes (Arc <Vec <u8>>),
-
 }
 
 struct InstructionRef {
@@ -94,9 +90,8 @@ impl <'a> RandomAccess <'a> {
 				) ?;
 
 			let backup_instruction =
-				protobuf_result (
-					protobuf::core::parse_from::<proto::BackupInstruction> (
-						& mut coded_input_stream),
+				DiskBackupInstruction::read (
+					& mut coded_input_stream,
 				) ?;
 
 			coded_input_stream.pop_limit (
@@ -105,8 +100,7 @@ impl <'a> RandomAccess <'a> {
 			if backup_instruction.has_chunk_to_emit () {
 
 				let chunk_id =
-					to_array_24 (
-						backup_instruction.get_chunk_to_emit ());
+					backup_instruction.chunk_to_emit ();
 
 				let index_entry =
 					repo.get_index_entry (
@@ -118,8 +112,7 @@ impl <'a> RandomAccess <'a> {
 
 					content:
 						InstructionRefContent::Chunk (
-							to_array_24 (
-								backup_instruction.get_chunk_to_emit ())),
+							backup_instruction.chunk_to_emit ()),
 
 					start:
 						offset,
@@ -137,7 +130,7 @@ impl <'a> RandomAccess <'a> {
 			if backup_instruction.has_bytes_to_emit () {
 
 				let bytes =
-					backup_instruction.get_bytes_to_emit ();
+					backup_instruction.bytes_to_emit ();
 
 				let size =
 					bytes.len () as u64;
@@ -278,7 +271,7 @@ impl <'a> Read for RandomAccess <'a> {
 								io::ErrorKind::InvalidData,
 								format! (
 									"Chunk not found: {}",
-									chunk_id.to_hex ()))
+									chunk_id))
 
 						) ?;
 
@@ -365,7 +358,7 @@ impl <'a> Seek for RandomAccess <'a> {
 									io::ErrorKind::InvalidData,
 									format! (
 										"Chunk not found: {}",
-										chunk_id.to_hex ()))
+										chunk_id))
 							) ?;
 
 						self.chunk_position =

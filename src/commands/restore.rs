@@ -5,7 +5,7 @@ use clap;
 
 use output::Output;
 
-use ::Repository;
+use zbackup::repository::Repository;
 use ::misc::*;
 
 pub fn do_restore (

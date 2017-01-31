@@ -4,14 +4,11 @@ use clap;
 
 use output::Output;
 
-use rustc_serialize::hex::ToHex;
-
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
-use ::zbackup::read::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::Repository;
 
 pub fn check_bundles (
 	output: & Output,
@@ -34,8 +31,8 @@ pub fn check_bundles (
 
 	// begin transaction
 
-	let temp_files =
-		TempFileManager::new (
+	let atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -51,7 +48,7 @@ pub fn check_bundles (
 
 			arguments.bundle_name_prefix.is_none ()
 
-			|| bundle_id.to_hex ().starts_with (
+			|| bundle_id.to_string ().starts_with (
 				arguments.bundle_name_prefix.as_ref ().unwrap ())
 
 		).collect ();
@@ -94,7 +91,7 @@ pub fn check_bundles (
 			repository.bundle_path (
 				bundle_id);
 
-		match read_bundle (
+		match bundle_read_path (
 			bundle_path,
 			repository.encryption_key (),
 		) {
@@ -140,7 +137,7 @@ pub fn check_bundles (
 
 	// write changes to disk
 
-	temp_files.commit () ?;
+	atomic_file_writer.commit () ?;
 
 	// clean up and return
 

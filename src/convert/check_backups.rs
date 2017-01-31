@@ -5,18 +5,17 @@ use std::path::PathBuf;
 
 use clap;
 
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
+use rust_crypto::digest::Digest;
+use rust_crypto::sha1::Sha1;
 
 use output::Output;
 
 use rustc_serialize::hex::ToHex;
 
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
+use zbackup::repository::Repository;
 
 pub fn check_backups (
 	output: & Output,
@@ -39,8 +38,8 @@ pub fn check_backups (
 
 	// begin transaction
 
-	let _temp_files =
-		TempFileManager::new (
+	let _atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -128,12 +127,12 @@ pub fn check_backups (
 
 		let missing_chunks: Vec <ChunkId> =
 			backup_chunks.iter ().filter (
-				|& chunk_id|
+				|chunk_id|
 
 				! repository.has_chunk (
-					* chunk_id)
+					chunk_id)
 
-			).map (|&c| c).collect ();
+			).map (|c| * c).collect ();
 
 		if let Some (ref error) = backup_expand_error {
 

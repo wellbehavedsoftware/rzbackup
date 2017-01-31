@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::ops::DerefMut;
-use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -20,11 +18,10 @@ use futures_cpupool::CpuPool;
 
 use output::Output;
 
-use rustc_serialize::hex::ToHex;
-
-use misc::*;
-use zbackup::data::*;
-use zbackup::read::*;
+use ::misc::*;
+use ::zbackup::data::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository_core::*;
 
 type ChunkMap =
 	Arc <HashMap <ChunkId, ChunkData>>;
@@ -59,8 +56,7 @@ pub struct BundleLoader {
 }
 
 struct BundleLoaderData {
-	repository_path: PathBuf,
-	encryption_key: Option <EncryptionKey>,
+	repository_core: Arc <RepositoryCore>,
 	num_threads: usize,
 }
 
@@ -86,24 +82,8 @@ pub struct BundleLoaderStatus {
 
 impl BundleLoader {
 
-	#[ inline ]
-	pub fn new <PathRef: AsRef <Path>> (
-		path: PathRef,
-		encryption_key: Option <EncryptionKey>,
-		num_threads: usize,
-	) -> BundleLoader {
-
-		Self::new_impl (
-			path.as_ref (),
-			encryption_key,
-			num_threads,
-		)
-
-	}
-
-	fn new_impl (
-		repository_path: & Path,
-		encryption_key: Option <EncryptionKey>,
+	pub fn new (
+		repository_core: Arc <RepositoryCore>,
 		num_threads: usize,
 	) -> BundleLoader {
 
@@ -113,12 +93,8 @@ impl BundleLoader {
 		BundleLoader {
 
 			data: Arc::new (BundleLoaderData {
-
-				repository_path: repository_path.to_owned (),
-				encryption_key: encryption_key,
-
+				repository_core: repository_core,
 				num_threads: num_threads,
-
 			}),
 
 			state: Arc::new (Mutex::new (BundleLoaderState {
@@ -163,7 +139,7 @@ impl BundleLoader {
 			output_message! (
 				debug,
 				"BundleLoader.load_bundle_async_async ({}) - Alreading loading",
-				bundle_id.to_hex ());
+				bundle_id);
 
 			return future::ok (
 
@@ -186,7 +162,7 @@ impl BundleLoader {
 			output_message! (
 				debug,
 				"BundleLoader.load_bundle_async_async ({}) - Alreading queued",
-				bundle_id.to_hex ());
+				bundle_id);
 
 			return chunk_map_future_channel.receiver.clone ().map_err (
 				|_cancelled| "Cancelled".to_string (),
@@ -208,7 +184,7 @@ impl BundleLoader {
 		output_message! (
 			debug,
 			"BundleLoader.load_bundle_async_async ({}) - Start loading",
-			bundle_id.to_hex ());
+			bundle_id);
 
 		self.load_bundle_async_async_impl (
 			self_state.deref_mut (),
@@ -342,20 +318,19 @@ impl BundleLoader {
 	) -> ChunkMapResult {
 
 		let bundle_path =
-			self.data.repository_path
-				.join ("bundles")
-				.join (bundle_id [0..1].to_hex ())
-				.join (bundle_id.to_hex ());
+			self.data.repository_core.bundle_path (
+				bundle_id,
+			);
 
 		let bundle_data: Vec <(ChunkId, Vec <u8>)> =
-			read_bundle (
+			bundle_read_path (
 				bundle_path,
-				self.data.encryption_key,
+				self.data.repository_core.encryption_key (),
 			).map_err (|original_error|
 
 				format! (
 					"Error reading bundle {}: {}",
-					bundle_id.to_hex (),
+					bundle_id,
 					original_error)
 
 			) ?;

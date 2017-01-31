@@ -5,16 +5,11 @@ use clap;
 
 use output::Output;
 
-use rustc_serialize::hex::ToHex;
-
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
-use ::zbackup::proto;
-use ::zbackup::read::*;
-use ::zbackup::write::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::Repository;
 
 pub fn check_indexes (
 	output: & Output,
@@ -37,8 +32,8 @@ pub fn check_indexes (
 
 	// begin transaction
 
-	let mut temp_files =
-		TempFileManager::new (
+	let atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -106,7 +101,7 @@ pub fn check_indexes (
 				old_index_id);
 
 		let old_index_entries =
-			read_index (
+			index_read_path (
 				& old_index_path,
 				repository.encryption_key (),
 			) ?;
@@ -116,26 +111,21 @@ pub fn check_indexes (
 
 		let mut changes = false;
 
-		for & (
-			ref old_index_bundle_header,
-			ref old_index_bundle_info,
-		) in old_index_entries.iter () {
-
-			let old_index_bundle_id =
-				to_array_24 (
-					old_index_bundle_header.get_id (),
-				);
+		for RawIndexEntry {
+			index_bundle_header: old_index_bundle_header,
+			bundle_info: old_index_bundle_info,
+		} in old_index_entries.into_iter () {
 
 			if ! bundle_ids.contains (
-				& old_index_bundle_id) {
+				& old_index_bundle_header.bundle_id ()) {
 
 				if arguments.verbose {
 
 					output.message_format (
 						format_args! (
 							"Index {} refers to nonexistant bundle {}",
-							old_index_id.to_hex (),
-							old_index_bundle_id.to_hex ()));
+							old_index_id,
+							old_index_bundle_header.bundle_id ()));
 
 				}
 
@@ -146,26 +136,22 @@ pub fn check_indexes (
 
 			}
 
-			let mut new_index_bundle_info =
-				proto::BundleInfo::new ();
+			let mut new_chunk_records =
+				Vec::new ();
 
 			for old_index_chunk_record
-			in old_index_bundle_info.get_chunk_record ().iter () {
-
-				let chunk_id =
-					to_array_24 (
-						old_index_chunk_record.get_id ());
+			in old_index_bundle_info.chunks () {
 
 				if seen_chunk_ids.contains (
-					& chunk_id) {
+					& old_index_chunk_record.chunk_id ()) {
 
 					if arguments.verbose {
 
 						output.message_format (
 							format_args! (
 								"Index {} contains duplicated chunk {}",
-								old_index_id.to_hex (),
-								chunk_id.to_hex ()));
+								old_index_id,
+								old_index_chunk_record.chunk_id ()));
 
 					}
 
@@ -175,22 +161,28 @@ pub fn check_indexes (
 				} else {
 
 					seen_chunk_ids.insert (
-						chunk_id);
+						old_index_chunk_record.chunk_id ());
 
-					new_index_bundle_info.mut_chunk_record ().push (
+					new_chunk_records.push (
 						old_index_chunk_record.clone ());
 
 				}
 
 			}
 
-			if ! new_index_bundle_info.get_chunk_record ().is_empty () {
+			if ! new_chunk_records.is_empty () {
 
 				new_index_entries.push (
-					(
-						old_index_bundle_header.clone (),
-						new_index_bundle_info,
-					)
+					RawIndexEntry {
+
+						index_bundle_header:
+							old_index_bundle_header,
+
+						bundle_info:
+							DiskBundleInfo::new (
+								new_chunk_records),
+
+					}
 				);
 
 			}
@@ -206,9 +198,9 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Removing index {}",
-							old_index_id.to_hex ()));
+							old_index_id));
 
-					temp_files.delete (
+					atomic_file_writer.delete (
 						old_index_path);
 
 				} else if ! arguments.verbose {
@@ -216,7 +208,7 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Index {} contains no valid entries",
-							old_index_id.to_hex ()));
+							old_index_id));
 
 				}
 
@@ -227,14 +219,14 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Repairing index {}",
-							old_index_id.to_hex ()));
+							old_index_id));
 
-					temp_files.delete (
+					atomic_file_writer.delete (
 						old_index_path);
 
-					write_index_auto (
-						& repository,
-						& mut temp_files,
+					index_write_auto (
+						repository.core (),
+						& atomic_file_writer,
 						& new_index_entries,
 					) ?;
 
@@ -243,7 +235,7 @@ pub fn check_indexes (
 					output.message_format (
 						format_args! (
 							"Index {} contains errors",
-							old_index_id.to_hex ()));
+							old_index_id));
 
 				}
 
@@ -292,7 +284,7 @@ pub fn check_indexes (
 					output,
 					"Committing changes");
 
-			temp_files.commit () ?;
+			atomic_file_writer.commit () ?;
 
 			output_job.complete ();
 

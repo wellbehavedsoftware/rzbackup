@@ -6,13 +6,11 @@ use clap;
 
 use output::Output;
 
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
-use ::read::*;
-use ::write::*;
 use ::zbackup::data::*;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::*;
 
 pub fn gc_bundles (
 	output: & Output,
@@ -35,8 +33,8 @@ pub fn gc_bundles (
 
 	// begin transaction
 
-	let mut temp_files =
-		TempFileManager::new (
+	let atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -113,7 +111,7 @@ pub fn gc_bundles (
 	compact_bundles (
 		output,
 		& repository,
-		& mut temp_files,
+		atomic_file_writer,
 		& all_index_entries,
 		& bundles_to_compact,
 		& other_chunks_seen,
@@ -161,27 +159,25 @@ fn get_all_index_entries (
 			repository.index_path (
 				index_id);
 
-		let index_entries = (
-			read_index (
+		let index_entries =
+			index_read_path (
 				& index_path,
-				repository.encryption_key ())
-		) ?;
+				repository.encryption_key (),
+			) ?;
 
-		for & (
-			ref bundle_index_header,
+		for & RawIndexEntry {
+			ref index_bundle_header,
 			ref bundle_info,
-		) in index_entries.iter () {
+		} in index_entries.iter () {
 
-			for chunk_record
-			in bundle_info.get_chunk_record ().iter () {
+			for bundle_chunk
+			in bundle_info.chunks () {
 
 				all_index_entries.insert (
 					(
-						to_array_24 (
-							bundle_index_header.get_id ()),
-						to_array_24 (
-							chunk_record.get_id ()),
-					)
+						index_bundle_header.bundle_id (),
+						bundle_chunk.chunk_id (),
+					),
 				);
 
 			}
@@ -231,7 +227,7 @@ fn read_bundles_metadata (
 				old_bundle_id);
 
 		let old_bundle_info =
-			read_bundle_info (
+			bundle_info_read_path (
 				old_bundle_path,
 				repository.encryption_key (),
 			) ?;
@@ -239,29 +235,25 @@ fn read_bundles_metadata (
 		let mut num_to_keep: u64 = 0;
 		let mut num_to_reap: u64 = 0;
 
-		for chunk_record
-		in old_bundle_info.get_chunk_record () {
-
-			let chunk_id =
-				to_array_24 (
-					chunk_record.get_id ());
+		for old_bundle_chunk
+		in old_bundle_info.chunks () {
 
 			if (
 				all_index_entries.contains (
 					& (
 						old_bundle_id,
-						chunk_id,
+						old_bundle_chunk.chunk_id (),
 					)
 				)
 			&&
 				! seen_chunk_ids.contains (
-					& chunk_id)
+					& old_bundle_chunk.chunk_id ())
 			) {
 
 				num_to_keep += 1;
 
 				seen_chunk_ids.insert (
-					chunk_id);
+					old_bundle_chunk.chunk_id ());
 
 			} else {
 
@@ -283,12 +275,12 @@ fn read_bundles_metadata (
 
 		} else {
 
-			for chunk_record
-			in old_bundle_info.get_chunk_record () {
+			for old_bundle_chunk
+			in old_bundle_info.chunks () {
 
 				other_chunks_seen.insert (
-					to_array_24 (
-						chunk_record.get_id ()));
+					old_bundle_chunk.chunk_id (),
+				);
 
 			}
 
@@ -351,7 +343,7 @@ fn delete_bundles (
 fn compact_bundles (
 	output: & Output,
 	repository: & Repository,
-	temp_files: & mut TempFileManager,
+	atomic_file_writer: AtomicFileWriter,
 	all_index_entries: & HashSet <(BundleId, ChunkId)>,
 	bundles_to_compact: & Vec <BundleId>,
 	other_chunks_seen: & HashSet <ChunkId>,
@@ -377,7 +369,7 @@ fn compact_bundles (
 				bundles_to_compact_total);
 
 		let uncompacted_bundle =
-			read_bundle (
+			bundle_read_path (
 				& bundle_path,
 				repository.encryption_key ()
 			) ?;
@@ -391,12 +383,10 @@ fn compact_bundles (
 				bundles_to_compact_count + 1,
 				bundles_to_compact_total);
 
-		let compacted_bundle_file =
-			Box::new (
-				temp_files.create (
-					bundle_path,
-				) ?
-			);
+		let mut compacted_bundle_file =
+			atomic_file_writer.create (
+				bundle_path,
+			) ?;
 
 		let mut compacted_bundle: Vec <(ChunkId, Vec <u8>)> =
 			Vec::new ();
@@ -429,8 +419,8 @@ fn compact_bundles (
 		let total_chunks =
 			compacted_bundle.len () as u64;
 
-		write_bundle (
-			compacted_bundle_file,
+		bundle_write_direct (
+			& mut compacted_bundle_file,
 			repository.encryption_key (),
 			& compacted_bundle,
 			|chunks_written| {
@@ -442,7 +432,7 @@ fn compact_bundles (
 			}
 		) ?;
 
-		temp_files.commit () ?;
+		atomic_file_writer.commit () ?;
 
 		output_job.complete ();
 

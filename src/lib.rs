@@ -24,7 +24,7 @@ extern crate output;
 extern crate adler32;
 extern crate byteorder;
 extern crate clap;
-extern crate crypto;
+extern crate crypto as rust_crypto;
 extern crate errno;
 extern crate futures;
 extern crate futures_cpupool;
@@ -56,16 +56,14 @@ pub mod server;
 mod compress;
 mod zbackup;
 
-pub use zbackup::crypto::CryptoReader;
-pub use zbackup::crypto::CryptoWriter;
+pub use ::misc::AtomicFileWriter;
+pub use zbackup::crypto;
 pub use zbackup::data::*;
-pub use zbackup::file::TempFileManager;
+pub use zbackup::disk_format;
 pub use zbackup::metadata::*;
 pub use zbackup::randaccess::RandomAccess;
-pub use zbackup::read;
-pub use zbackup::repo::Repository;
-pub use zbackup::repo::RepositoryConfig;
-pub use zbackup::write;
+pub use zbackup::repository::Repository as ZBackupRepository;
+pub use zbackup::repository::RepositoryConfig as ZBackupRepositoryConfig;
 
 pub use server::run_server;
 

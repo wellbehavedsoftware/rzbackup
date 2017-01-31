@@ -21,24 +21,24 @@ use rand::Rng;
 use ::misc::*;
 
 #[ derive (Clone) ]
-pub struct TempFileManager {
-	state: Arc <Mutex <TempFileManagerState>>,
+pub struct AtomicFileWriter {
+	state: Arc <Mutex <AtomicFileWriterState>>,
 }
 
-struct TempFileManagerState {
+struct AtomicFileWriterState {
 	lock_fd: libc::c_int,
 	temp_dir_path: PathBuf,
 	temp_files: Vec <(String, PathBuf)>,
 	delete_files: Vec <PathBuf>,
 }
 
-impl TempFileManager {
+impl AtomicFileWriter {
 
 	pub fn new (
 		output: & Output,
 		repository_path: & Path,
 		sleep_time: Option <Duration>,
-	) -> Result <TempFileManager, String> {
+	) -> Result <AtomicFileWriter, String> {
 
 		// create or open lock file
 
@@ -128,9 +128,9 @@ impl TempFileManager {
 
 		}
 
-		Ok (TempFileManager {
+		Ok (AtomicFileWriter {
 			state: Arc::new (Mutex::new (
-				TempFileManagerState {
+				AtomicFileWriterState {
 					lock_fd: lock_fd,
 					temp_dir_path: temp_dir_path,
 					temp_files: Vec::new (),
@@ -436,7 +436,7 @@ impl TempFileManager {
 
 }
 
-impl Drop for TempFileManagerState {
+impl Drop for AtomicFileWriterState {
 
 	fn drop (
 		& mut self,

@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
-use crypto::sha2::Sha256;
+use rust_crypto::digest::Digest;
+use rust_crypto::sha1::Sha1;
+use rust_crypto::sha2::Sha256;
 
 use futures;
 use futures::BoxFuture;
@@ -36,14 +36,12 @@ use protobuf::stream::CodedInputStream;
 use rustc_serialize::hex::ToHex;
 
 use misc::*;
-
 use zbackup::bundle_loader::*;
-use zbackup::crypto::*;
 use zbackup::data::*;
+use zbackup::disk_format::*;
 use zbackup::index_cache::*;
-use zbackup::proto;
 use zbackup::randaccess::*;
-use zbackup::read::*;
+use zbackup::repository_core::*;
 use zbackup::storage::*;
 
 /// This is the main struct which implements the ZBackup restore functionality.
@@ -78,9 +76,7 @@ pub struct RepositoryConfig {
 
 struct RepositoryData {
 	config: RepositoryConfig,
-	path: PathBuf,
-	storage_info: proto::StorageInfo,
-	encryption_key: Option <EncryptionKey>,
+	core: Arc <RepositoryCore>,
 }
 
 pub struct RepositoryStatus {
@@ -199,71 +195,16 @@ impl Repository {
 		password_file_path: Option <& Path>,
 	) -> Result <Repository, String> {
 
-		// load info file
+		// load repository core
 
-		let output_job =
-			output_job_start! (
-				output,
-				"Opening repository {}",
-				repository_path.to_string_lossy ());
-
-		let storage_info =
-			read_storage_info (
-				repository_path.join (
-					"info"),
-			) ?;
-
-		// decrypt encryption key with password
-
-		let encryption_key =
-			if storage_info.has_encryption_key () {
-
-			if password_file_path.is_none () {
-
-				output_job.remove ();
-
-				return Err (
-					"Required password file not provided".to_string ());
-
-			}
-
-			match (
-				decrypt_key (
-					password_file_path.unwrap (),
-					storage_info.get_encryption_key (),
+		let repository_core =
+			Arc::new (
+				RepositoryCore::open (
+					output,
+					repository_path,
+					password_file_path,
 				) ?
-			) {
-
-				Some (key) =>
-					Some (key),
-
-				None => {
-
-					output_job.remove ();
-
-					return Err (
-						"Incorrect password".to_string ());
-
-				},
-
-			}
-
-		} else {
-
-			if password_file_path.is_some () {
-
-				output_job.remove ();
-
-				return Err (
-					"Unnecessary password file provided".to_string ());
-
-			}
-
-			None
-
-		};
-
-		output_job.complete ();
+			);
 
 		// create thread pool
 
@@ -275,8 +216,7 @@ impl Repository {
 
 		let bundle_loader =
 			BundleLoader::new (
-				repository_path,
-				encryption_key,
+				repository_core.clone (),
 				repository_config.max_threads);
 
 		// create storage manager
@@ -295,24 +235,17 @@ impl Repository {
 		// create data
 
 		let repository_data =
-			Arc::new (
-				RepositoryData {
-
-			config: repository_config,
-
-			path: repository_path.to_owned (),
-			storage_info: storage_info,
-			encryption_key: encryption_key,
-
-		});
+			Arc::new (RepositoryData {
+				config: repository_config,
+				core: repository_core.clone (),
+			});
 
 		// create state
 
 		let repository_state =
 			Arc::new (Mutex::new (RepositoryState {
 				index_cache: IndexCache::new (
-					repository_path,
-					encryption_key,
+					repository_core.clone (),
 				),
 				bundles_needed: HashSet::new (),
 			}));
@@ -394,20 +327,19 @@ impl Repository {
 				backup_name);
 
 		let backup_info =
-			read_backup_file (
-				self.data.path
-					.join ("backups")
-					.join (& backup_name [1 .. ]),
-				self.data.encryption_key,
+			backup_read_path (
+				self.data.core.backup_path (
+					backup_name),
+				self.data.core.encryption_key (),
 			) ?;
 
 		// expand backup data
 
 		let mut input =
 			Cursor::new (
-				backup_info.get_backup_data ().to_owned ());
+				backup_info.backup_data ().to_owned ());
 
-		for _iteration in 0 .. backup_info.get_iterations () {
+		for _iteration in 0 .. backup_info.iterations () {
 
 			let mut temp_output: Cursor <Vec <u8>> =
 				Cursor::new (
@@ -438,8 +370,7 @@ impl Repository {
 		Ok (
 			(
 				input.into_inner (),
-				to_array_32 (
-					backup_info.get_sha256 ()),
+				backup_info.sha256 (),
 			)
 		)
 
@@ -582,18 +513,17 @@ impl Repository {
 	fn follow_instruction_async_async (
 		& self,
 		debug: & Output,
-		backup_instruction: & proto::BackupInstruction,
+		backup_instruction: & DiskBackupInstruction,
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
 		if backup_instruction.has_chunk_to_emit ()
 		&& backup_instruction.has_bytes_to_emit () {
 
 			let chunk_id =
-				to_array_24 (
-					backup_instruction.get_chunk_to_emit ());
+				backup_instruction.chunk_to_emit ();
 
 			let backup_instruction_bytes_to_emit =
-				backup_instruction.get_bytes_to_emit ().to_vec ();
+				backup_instruction.bytes_to_emit ().to_vec ();
 
 			self.get_chunk_async_async_debug (
 				debug,
@@ -618,8 +548,7 @@ impl Repository {
 		} else if backup_instruction.has_chunk_to_emit () {
 
 			let chunk_id =
-				to_array_24 (
-					backup_instruction.get_chunk_to_emit ());
+				backup_instruction.chunk_to_emit ();
 
 			self.get_chunk_async_async_debug (
 				debug,
@@ -632,7 +561,7 @@ impl Repository {
 				futures::done (Ok (
 
 				Arc::new (
-					backup_instruction.get_bytes_to_emit ().to_vec ())
+					backup_instruction.bytes_to_emit ().to_vec ())
 
 				)).boxed ()
 			)).boxed ()
@@ -716,11 +645,9 @@ impl Repository {
 
 				} else {
 
-					let backup_instruction: proto::BackupInstruction =
-						read_message (
+					let backup_instruction =
+						DiskBackupInstruction::read (
 							& mut coded_input_stream,
-							|| format! (
-								"backup instruction"),
 						) ?;
 
 					future_chunk_job = Some (
@@ -1023,7 +950,7 @@ impl Repository {
 	) -> BoxFuture <BoxFuture <ChunkData, String>, String> {
 
 		match self_state.index_cache.get (
-			chunk_id,
+			& chunk_id,
 		) {
 
 			Some (index_entry) =>
@@ -1038,7 +965,7 @@ impl Repository {
 				futures::failed (
 					format! (
 						"Missing chunk: {}",
-						chunk_id.to_hex ()),
+						chunk_id),
 				).boxed (),
 
 		}
@@ -1103,9 +1030,11 @@ impl Repository {
 
 					} else {
 
-						Err (format! (
-							"Chunk not found: {}",
-							chunk_id.to_hex ()))
+						Err (
+							format! (
+								"Chunk not found: {}",
+								chunk_id)
+						)
 
 					}
 
@@ -1143,7 +1072,7 @@ impl Repository {
 		}
 
 		match self_state.index_cache.get (
-			chunk_id,
+			& chunk_id,
 		) {
 
 			Some (value) =>
@@ -1153,7 +1082,7 @@ impl Repository {
 				Err (
 					format! (
 						"Missing chunk: {}",
-						chunk_id.to_hex ())
+						chunk_id)
 				),
 
 		}
@@ -1164,7 +1093,7 @@ impl Repository {
 
 	pub fn has_chunk (
 		& self,
-		chunk_id: ChunkId,
+		chunk_id: & ChunkId,
 	) -> bool {
 
 		let self_state =
@@ -1227,23 +1156,27 @@ impl Repository {
 		& self.data.config
 	}
 
+	/// This is an accessor method for the `RepositoryCore` which holds the most
+	/// basic details about a repository
+
+	#[ inline ]
+	pub fn core (& self) -> & RepositoryCore {
+		& self.data.core
+	}
+
 	/// This is an accessor method to access the repository's `path`
 
 	#[ inline ]
-	pub fn path (
-		& self,
-	) -> & Path {
-		& self.data.path
+	pub fn path (& self) -> & Path {
+		& self.data.core.path ()
 	}
 
 	/// This is an accessor method to access the `StorageInfo` protobug struct
 	/// which was loaded from the repository's index file.
 
 	#[ inline ]
-	pub fn storage_info (
-		& self,
-	) -> & proto::StorageInfo {
-		& self.data.storage_info
+	pub fn storage_info (& self) -> & DiskStorageInfo {
+		& self.data.core.storage_info ()
 	}
 
 	/// This is an accessor method to access the decrypted encryption key which
@@ -1251,36 +1184,35 @@ impl Repository {
 	/// provided password.
 
 	#[ inline ]
-	pub fn encryption_key (
-		& self,
-	) -> Option <[u8; KEY_SIZE]> {
-		self.data.encryption_key
+	pub fn encryption_key (& self) -> Option <EncryptionKey> {
+		self.data.core.encryption_key ()
 	}
 
 	/// Convenience function to return the filesystem path for an index id.
 
+	#[ inline ]
 	pub fn index_path (
 		& self,
 		index_id: IndexId,
 	) -> PathBuf {
 
-		self.data.path
-			.join ("index")
-			.join (index_id.to_hex ())
+		self.data.core.index_path (
+			index_id,
+		)
 
 	}
 
 	/// Convenience function to return the filesystem path for a bundle id.
 
+	#[ inline ]
 	pub fn bundle_path (
 		& self,
 		bundle_id: BundleId,
 	) -> PathBuf {
 
-		self.data.path
-			.join ("bundles")
-			.join (bundle_id [0 .. 1].to_hex ())
-			.join (bundle_id.to_hex ())
+		self.data.core.bundle_path (
+			bundle_id,
+		)
 
 	}
 

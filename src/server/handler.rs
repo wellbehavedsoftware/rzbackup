@@ -7,9 +7,7 @@ use std::net::TcpStream;
 use output;
 use output::Output;
 
-use rustc_serialize::hex::ToHex;
-
-use ::Repository;
+use ::zbackup::repository::*;
 use ::misc::*;
 
 pub fn handle_client (
@@ -358,7 +356,7 @@ fn handle_status (
 			io_result (write! (
 				writer,
 				"    - \"{}\"\n",
-				bundle_id.to_hex (),
+				bundle_id,
 			)) ?;
 
 		}
@@ -395,7 +393,7 @@ fn handle_status (
 			io_result (write! (
 				writer,
 				"    - \"{}\"\n",
-				bundle_id.to_hex (),
+				bundle_id,
 			)) ?;
 
 		}

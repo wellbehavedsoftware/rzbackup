@@ -10,14 +10,11 @@ use rand::Rng;
 
 use rustc_serialize::hex::ToHex;
 
-use ::Repository;
-use ::TempFileManager;
 use ::convert::utils::*;
 use ::misc::*;
-use ::read::*;
-use ::write::*;
 use ::zbackup::data::*;
-use ::zbackup::proto;
+use ::zbackup::disk_format::*;
+use ::zbackup::repository::*;
 
 pub fn gc_indexes (
 	output: & Output,
@@ -40,8 +37,8 @@ pub fn gc_indexes (
 
 	// begin transaction
 
-	let temp_files =
-		TempFileManager::new (
+	let atomic_file_writer =
+		AtomicFileWriter::new (
 			output,
 			& arguments.repository_path,
 			None,
@@ -154,7 +151,7 @@ pub fn gc_indexes (
 				old_index_id);
 
 		let old_index_entries =
-			read_index (
+			index_read_path (
 				& old_index_path,
 				repository.encryption_key (),
 			) ?;
@@ -162,16 +159,17 @@ pub fn gc_indexes (
 		// skip this index if all chunks are still referenced
 
 		if ! old_index_entries.iter ().any (
-			|& (
-				ref _old_index_bundle_header,
-				ref old_index_bundle_info,
-			)|
+			|& RawIndexEntry {
+				index_bundle_header: ref _old_index_bundle_header,
+				bundle_info: ref old_index_bundle_info,
+			}|
 
-			old_index_bundle_info.get_chunk_record ().iter ().any (
+			old_index_bundle_info.chunks ().any (
 				|ref old_chunk_record| {
 
 				! backup_chunk_ids.contains (
-					old_chunk_record.get_id ())
+					& old_chunk_record.chunk_id (),
+				)
 
 			})
 
@@ -188,23 +186,23 @@ pub fn gc_indexes (
 		let mut new_index_entries: Vec <RawIndexEntry> =
 			Vec::new ();
 
-		for & (
-			ref old_index_bundle_header,
-			ref old_index_bundle_info,
-		) in old_index_entries.iter () {
+		for RawIndexEntry {
+			index_bundle_header: old_index_bundle_header,
+			bundle_info: old_index_bundle_info,
+		} in old_index_entries.into_iter () {
 
 			// skip this bundle if there are no referenced chunks
 
-			if ! old_index_bundle_info.get_chunk_record ().iter ().any (
+			if ! old_index_bundle_info.chunks ().any (
 				|ref old_chunk_record| {
 
 				backup_chunk_ids.contains (
-					old_chunk_record.get_id ())
+					& old_chunk_record.chunk_id ())
 
 			}) {
 
 				chunks_removed +=
-					old_index_bundle_info.get_chunk_record ().len () as u64;
+					old_index_bundle_info.num_chunks ();
 
 				continue;
 
@@ -212,20 +210,17 @@ pub fn gc_indexes (
 
 			// create a new index entry for this bundle
 
-			let new_index_bundle_header =
-				old_index_bundle_header.clone ();
+			let mut new_bundle_chunks =
+				Vec::new ();
 
-			let mut new_index_bundle_info =
-				proto::BundleInfo::new ();
-
-			for old_chunk_record
-			in old_index_bundle_info.get_chunk_record ().iter () {
+			for old_bundle_chunk
+			in old_index_bundle_info.chunks () {
 
 				if backup_chunk_ids.contains (
-					old_chunk_record.get_id ()) {
+					& old_bundle_chunk.chunk_id ()) {
 
-					new_index_bundle_info.mut_chunk_record ().push (
-						old_chunk_record.clone ());
+					new_bundle_chunks.push (
+						old_bundle_chunk.clone ());
 
 				} else {
 
@@ -236,15 +231,21 @@ pub fn gc_indexes (
 			}
 
 			new_index_entries.push (
-				(
-					new_index_bundle_header,
-					new_index_bundle_info,
-				)
+				RawIndexEntry {
+
+					index_bundle_header:
+						old_index_bundle_header,
+
+					bundle_info:
+						DiskBundleInfo::new (
+							new_bundle_chunks),
+
+				}
 			);
 
 		}
 
-		temp_files.delete (
+		atomic_file_writer.delete (
 			old_index_path);
 
 		if ! new_index_entries.is_empty () {
@@ -263,15 +264,13 @@ pub fn gc_indexes (
 					.join ("index")
 					.join (new_index_name);
 
-			let new_index_file =
-				Box::new (
-					temp_files.create (
-						new_index_path,
-					) ?
-				);
+			let mut new_index_file =
+				atomic_file_writer.create (
+					new_index_path,
+				) ?;
 
-			write_index (
-				new_index_file,
+			index_write_direct (
+				& mut new_index_file,
 				repository.encryption_key (),
 				& new_index_entries,
 			) ?;
@@ -303,7 +302,7 @@ pub fn gc_indexes (
 			output,
 			"Committing changes");
 
-	temp_files.commit () ?;
+	atomic_file_writer.commit () ?;
 
 	output_job.remove ();
 
