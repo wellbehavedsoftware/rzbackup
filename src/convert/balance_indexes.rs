@@ -9,7 +9,7 @@ use ::RawIndexEntry;
 use ::convert::utils::*;
 use ::misc::*;
 use zbackup::disk_format::*;
-use zbackup::repository::Repository;
+use zbackup::repository_core::*;
 
 pub fn balance_indexes (
 	output: & Output,
@@ -18,14 +18,13 @@ pub fn balance_indexes (
 
 	// open repository
 
-	let repository =
+	let repository_core =
 		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
-			Repository::open (
+			RepositoryCore::open (
 				& output,
-				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
@@ -76,14 +75,14 @@ pub fn balance_indexes (
 	) in old_index_ids_and_sizes {
 
 		let old_index_path =
-			repository.index_path (
+			repository_core.index_path (
 				old_index_id);
 
 		for old_index_entry in (
 
 			index_read_path (
 				& old_index_path,
-				repository.encryption_key (),
+				repository_core.encryption_key (),
 			)
 
 		) ? {
@@ -100,7 +99,7 @@ pub fn balance_indexes (
 
 				flush_index_entries (
 					output,
-					& repository,
+					& repository_core,
 					& atomic_file_writer,
 					& index_entries,
 				) ?;
@@ -125,7 +124,7 @@ pub fn balance_indexes (
 
 		flush_index_entries (
 			output,
-			& repository,
+			& repository_core,
 			& atomic_file_writer,
 			& mut entries_buffer,
 		) ?;
@@ -145,10 +144,7 @@ pub fn balance_indexes (
 
 	output_job.complete ();
 
-	// clean up and return
-
-	repository.close (
-		output);
+	// return
 
 	Ok (true)
 

@@ -18,16 +18,11 @@ use num_cpus;
 use output::Output;
 use output::OutputJob;
 
-use rand;
-use rand::Rng;
-
-use rustc_serialize::hex::ToHex;
-
-use zbackup::repository::Repository;
-use ::convert::utils::*;
-use ::misc::*;
-use ::zbackup::data::*;
-use ::zbackup::disk_format::*;
+use convert::utils::*;
+use misc::*;
+use zbackup::data::*;
+use zbackup::disk_format::*;
+use zbackup::repository_core::*;
 
 pub fn balance_bundles (
 	output: & Output,
@@ -39,14 +34,13 @@ pub fn balance_bundles (
 
 	// open repository
 
-	let repository =
+	let repository_core =
 		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
-			Repository::open (
+			RepositoryCore::open (
 				& output,
-				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
@@ -94,7 +88,7 @@ pub fn balance_bundles (
 
 			read_indexes_find_unbalanced (
 				output,
-				& repository,
+				& repository_core,
 				& arguments,
 				minimum_chunk_count,
 				& old_index_ids_and_sizes,
@@ -124,7 +118,7 @@ pub fn balance_bundles (
 				output,
 				& cpu_pool,
 				num_threads,
-				& repository,
+				& repository_core,
 				& atomic_file_writer,
 				& arguments,
 				minimum_chunk_count,
@@ -154,10 +148,7 @@ pub fn balance_bundles (
 
 	}
 
-	// clean up and return
-
-	repository.close (
-		output);
+	// return
 
 	Ok (true)
 
@@ -165,7 +156,7 @@ pub fn balance_bundles (
 
 fn read_indexes_find_unbalanced (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
 	old_index_ids_and_sizes: & Vec <(IndexId, u64)>,
@@ -200,13 +191,13 @@ fn read_indexes_find_unbalanced (
 			total_index_size);
 
 		let old_index_path =
-			repository.index_path (
+			repository_core.index_path (
 				old_index_id);
 
 		let old_index_entries =
 			index_read_path (
 				& old_index_path,
-				repository.encryption_key (),
+				repository_core.encryption_key (),
 			) ?;
 
 		for & RawIndexEntry {
@@ -321,7 +312,7 @@ fn balance_bundles_real (
 	output: & Output,
 	cpu_pool: & CpuPool,
 	max_tasks: usize,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	atomic_file_writer: & AtomicFileWriter,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
@@ -391,7 +382,7 @@ fn balance_bundles_real (
 				& mut bundle_chunks,
 				& mut pending_chunks);
 
-			let repository = repository.clone ();
+			let repository_core = repository_core.clone ();
 			let atomic_file_writer = atomic_file_writer.clone ();
 
 			let output_job_write_bundle =
@@ -406,7 +397,7 @@ fn balance_bundles_real (
 
 				flush_bundle (
 					& output_job_write_bundle,
-					& repository,
+					& repository_core,
 					atomic_file_writer,
 					& bundle_chunks,
 				).map (
@@ -451,14 +442,14 @@ fn balance_bundles_real (
 				} else {
 
 					let bundle_path =
-						repository.bundle_path (
+						repository_core.bundle_path (
 							index_bundle_header.bundle_id ());
 
 					atomic_file_writer.delete (
 						bundle_path.clone ());
 
 					let encryption_key =
-						repository.encryption_key ();
+						repository_core.encryption_key ();
 
 					let output_job_read_bundle =
 						output_job_start! (
@@ -488,7 +479,7 @@ fn balance_bundles_real (
 				index_iterator.next () {
 
 				atomic_file_writer.delete (
-					repository.index_path (
+					repository_core.index_path (
 						index_id));
 
 				index_entry_iterator = index_entries.into_iter ();
@@ -580,7 +571,7 @@ fn balance_bundles_real (
 		pending_index_entries.push (
 			flush_bundle (
 				& output_job_final_bundle,
-				& repository,
+				& repository_core,
 				atomic_file_writer.clone (),
 				& pending_chunks,
 			) ?
@@ -614,7 +605,7 @@ fn balance_bundles_real (
 			pending_index_entries.push (
 				flush_bundle (
 					& output_job_checkpoint,
-					& repository,
+					& repository_core,
 					atomic_file_writer.clone (),
 					& pending_chunks,
 				) ?
@@ -637,7 +628,7 @@ fn balance_bundles_real (
 
 	flush_index (
 		output,
-		& repository,
+		& repository_core,
 		& atomic_file_writer,
 		& pending_index_entries,
 	) ?;
@@ -665,7 +656,7 @@ fn balance_bundles_real (
 
 fn flush_bundle (
 	output_job: & OutputJob,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	atomic_file_writer: AtomicFileWriter,
 	bundle_chunks: & Vec <(ChunkId, Vec <u8>)>,
 ) -> Result <RawIndexEntry, String> {
@@ -673,21 +664,14 @@ fn flush_bundle (
 	let new_bundle_id =
 		BundleId::random ();
 
-	let new_bundle_name =
-		new_bundle_id.to_string ();
-
 	let new_bundle_path =
-		repository.path ()
-			.join ("bundles")
-			.join (& new_bundle_name [0 .. 2])
-			.join (& new_bundle_name);
+		repository_core.bundle_path (
+			new_bundle_id);
 
 	let mut new_bundle_file =
-		Box::new (
-			atomic_file_writer.create (
-				new_bundle_path,
-			) ?
-		);
+		atomic_file_writer.create (
+			new_bundle_path,
+		) ?;
 
 	let total_chunks =
 		bundle_chunks.len () as u64;
@@ -695,7 +679,7 @@ fn flush_bundle (
 	let new_index_bundle_info =
 		bundle_write_direct (
 			& mut new_bundle_file,
-			repository.encryption_key (),
+			repository_core.encryption_key (),
 			& bundle_chunks,
 			move |chunks_written| {
 
@@ -719,7 +703,7 @@ fn flush_bundle (
 
 fn flush_index (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	atomic_file_writer: & AtomicFileWriter,
 	new_index_entries: & Vec <RawIndexEntry>,
 ) -> Result <(), String> {
@@ -733,19 +717,12 @@ fn flush_index (
 			output,
 			"Writing index");
 
-	let new_index_bytes: Vec <u8> =
-		rand::thread_rng ()
-			.gen_iter::<u8> ()
-			.take (24)
-			.collect ();
-
-	let new_index_name: String =
-		new_index_bytes.to_hex ();
+	let new_index_id =
+		IndexId::random ();
 
 	let new_index_path =
-		repository.path ()
-			.join ("index")
-			.join (& new_index_name);
+		repository_core.index_path (
+			new_index_id);
 
 	let mut new_index_file =
 		atomic_file_writer.create (
@@ -754,7 +731,7 @@ fn flush_index (
 
 	index_write_direct (
 		& mut new_index_file,
-		repository.encryption_key (),
+		repository_core.encryption_key (),
 		& new_index_entries,
 	) ?;
 

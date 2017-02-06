@@ -5,11 +5,11 @@ use clap;
 
 use output::Output;
 
-use ::convert::utils::*;
-use ::misc::*;
-use ::zbackup::data::*;
-use ::zbackup::disk_format::*;
-use ::zbackup::repository::Repository;
+use convert::utils::*;
+use misc::*;
+use zbackup::data::*;
+use zbackup::disk_format::*;
+use zbackup::repository_core::*;
 
 pub fn check_indexes (
 	output: & Output,
@@ -18,14 +18,13 @@ pub fn check_indexes (
 
 	// open repository
 
-	let repository =
+	let repository_core =
 		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
-			Repository::open (
+			RepositoryCore::open (
 				& output,
-				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
@@ -97,13 +96,13 @@ pub fn check_indexes (
 			old_index_total_size);
 
 		let old_index_path =
-			repository.index_path (
+			repository_core.index_path (
 				old_index_id);
 
 		let old_index_entries =
 			index_read_path (
 				& old_index_path,
-				repository.encryption_key (),
+				repository_core.encryption_key (),
 			) ?;
 
 		let mut new_index_entries: Vec <RawIndexEntry> =
@@ -225,7 +224,7 @@ pub fn check_indexes (
 						old_index_path);
 
 					index_write_auto (
-						repository.core (),
+						& repository_core,
 						& atomic_file_writer,
 						& new_index_entries,
 					) ?;
@@ -299,10 +298,7 @@ pub fn check_indexes (
 
 	}
 
-	// clean up and return
-
-	repository.close (
-		output);
+	// return
 
 	Ok (
 		missing_chunk_count + duplicated_chunk_count > 0

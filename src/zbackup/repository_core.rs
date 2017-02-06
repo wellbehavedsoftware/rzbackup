@@ -9,6 +9,7 @@ use zbackup::crypto::*;
 use zbackup::data::*;
 use zbackup::disk_format::*;
 
+#[ derive (Clone, Debug) ]
 pub struct RepositoryCore {
 	storage_info: DiskStorageInfo,
 	path: PathBuf,

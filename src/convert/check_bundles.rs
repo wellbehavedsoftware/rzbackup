@@ -8,7 +8,7 @@ use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
 use ::zbackup::disk_format::*;
-use ::zbackup::repository::Repository;
+use ::zbackup::repository_core::*;
 
 pub fn check_bundles (
 	output: & Output,
@@ -17,14 +17,13 @@ pub fn check_bundles (
 
 	// open repository
 
-	let repository =
+	let repository_core =
 		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
-			Repository::open (
+			RepositoryCore::open (
 				& output,
-				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
@@ -88,12 +87,12 @@ pub fn check_bundles (
 		// read the bundle
 
 		let bundle_path =
-			repository.bundle_path (
+			repository_core.bundle_path (
 				bundle_id);
 
 		match bundle_read_path (
 			bundle_path,
-			repository.encryption_key (),
+			repository_core.encryption_key (),
 		) {
 
 			Ok (_bundle_chunks) => {
@@ -139,10 +138,7 @@ pub fn check_bundles (
 
 	atomic_file_writer.commit () ?;
 
-	// clean up and return
-
-	repository.close (
-		output);
+	// return
 
 	Ok (invalid_bundle_count == 0)
 

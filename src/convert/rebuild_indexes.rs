@@ -18,7 +18,7 @@ use ::convert::utils::*;
 use ::misc::*;
 use ::zbackup::data::*;
 use ::zbackup::disk_format::*;
-use ::zbackup::repository::*;
+use ::zbackup::repository_core::*;
 
 enum TaskResult {
 
@@ -39,7 +39,7 @@ type TaskFuture =
 
 struct IndexRebuilder <'a> {
 	arguments: & 'a RebuildIndexesArguments,
-	repository: Repository,
+	repository_core: RepositoryCore,
 	max_tasks: usize,
 	cpu_pool: CpuPool,
 }
@@ -53,14 +53,13 @@ impl <'a> IndexRebuilder <'a> {
 
 		// open repository
 
-		let repository =
+		let repository_core =
 			string_result_with_prefix (
 				|| format! (
 					"Error opening repository {}: ",
 					arguments.repository_path.to_string_lossy ()),
-				Repository::open (
+				RepositoryCore::open (
 					& output,
-					Repository::default_config (),
 					& arguments.repository_path,
 					arguments.password_file_path.clone ()),
 			) ?;
@@ -78,7 +77,7 @@ impl <'a> IndexRebuilder <'a> {
 
 		Ok (IndexRebuilder {
 			arguments: arguments,
-			repository: repository,
+			repository_core: repository_core,
 			max_tasks: num_threads,
 			cpu_pool: cpu_pool,
 		})
@@ -142,8 +141,8 @@ impl <'a> IndexRebuilder <'a> {
 				if let Some (bundle_id) =
 					bundle_ids_iter.next () {
 
-					let repository =
-						self.repository.clone ();
+					let repository_core =
+						self.repository_core.clone ();
 
 					let output_job_bundle =
 						output_job_start! (
@@ -156,9 +155,9 @@ impl <'a> IndexRebuilder <'a> {
 
 							let bundle_info =
 								bundle_info_read_path (
-									repository.bundle_path (
+									repository_core.bundle_path (
 										bundle_id),
-									repository.encryption_key (),
+									repository_core.encryption_key (),
 								) ?;
 
 							Ok (TaskResult::ReadBundle {
@@ -231,8 +230,8 @@ impl <'a> IndexRebuilder <'a> {
 						let output =
 							output.clone ();
 
-						let repository =
-							self.repository.clone ();
+						let repository_core =
+							self.repository_core.clone ();
 
 						let atomic_file_writer =
 							atomic_file_writer.clone ();
@@ -255,7 +254,7 @@ impl <'a> IndexRebuilder <'a> {
 							self.cpu_pool.spawn_fn (move || {
 
 								index_write_with_id (
-									& repository.core (),
+									& repository_core,
 									& atomic_file_writer,
 									index_id,
 									& index_entries,
@@ -294,7 +293,7 @@ impl <'a> IndexRebuilder <'a> {
 
 			flush_index_entries (
 				output,
-				& self.repository,
+				& self.repository_core,
 				& atomic_file_writer,
 				& mut entries_buffer,
 			) ?;
@@ -321,7 +320,7 @@ impl <'a> IndexRebuilder <'a> {
 		for old_index_id in old_index_ids {
 
 			atomic_file_writer.delete (
-				self.repository.index_path (
+				self.repository_core.index_path (
 					old_index_id));
 
 		}

@@ -12,10 +12,10 @@ use output::Output;
 
 use rustc_serialize::hex::ToHex;
 
-use ::convert::utils::*;
-use ::misc::*;
-use ::zbackup::data::*;
-use zbackup::repository::Repository;
+use convert::utils::*;
+use misc::*;
+use zbackup::data::*;
+use zbackup::repository::*;
 
 pub fn check_backups (
 	output: & Output,

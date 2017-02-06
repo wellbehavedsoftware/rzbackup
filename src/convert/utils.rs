@@ -16,6 +16,7 @@ use ::misc::*;
 use ::zbackup::data::*;
 use ::zbackup::disk_format::*;
 use ::zbackup::repository::*;
+use ::zbackup::repository_core::*;
 
 pub fn scan_index_files <
 	RepositoryPath: AsRef <Path>,
@@ -349,7 +350,7 @@ pub fn scan_bundle_files_with_sizes <
 
 pub fn flush_index_entries (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	atomic_file_writer: & AtomicFileWriter,
 	index_entries_buffer: & Vec <RawIndexEntry>,
 ) -> Result <IndexId, String> {
@@ -364,7 +365,7 @@ pub fn flush_index_entries (
 			index_id);
 
 	index_write_auto (
-		repository.core (),
+		repository_core,
 		atomic_file_writer,
 		& index_entries_buffer,
 	) ?;

@@ -6,11 +6,11 @@ use clap;
 
 use output::Output;
 
-use ::convert::utils::*;
-use ::misc::*;
-use ::zbackup::data::*;
-use ::zbackup::disk_format::*;
-use ::zbackup::repository::*;
+use convert::utils::*;
+use misc::*;
+use zbackup::data::*;
+use zbackup::disk_format::*;
+use zbackup::repository_core::*;
 
 pub fn gc_bundles (
 	output: & Output,
@@ -19,14 +19,13 @@ pub fn gc_bundles (
 
 	// open repository
 
-	let repository =
+	let repository_core =
 		string_result_with_prefix (
 			|| format! (
 				"Error opening repository {}: ",
 				arguments.repository_path.to_string_lossy ()),
-			Repository::open (
+			RepositoryCore::open (
 				& output,
-				Repository::default_config (),
 				& arguments.repository_path,
 				arguments.password_file_path.clone ()),
 		) ?;
@@ -72,7 +71,7 @@ pub fn gc_bundles (
 
 	get_all_index_entries (
 		output,
-		& repository,
+		& repository_core,
 		& index_ids_and_sizes,
 		& mut all_index_entries,
 	) ?;
@@ -90,7 +89,7 @@ pub fn gc_bundles (
 
 	read_bundles_metadata (
 		output,
-		& repository,
+		& repository_core,
 		& old_bundles,
 		& all_index_entries,
 		& mut bundles_to_compact,
@@ -102,7 +101,7 @@ pub fn gc_bundles (
 
 	delete_bundles (
 		output,
-		& repository,
+		& repository_core,
 		& bundles_to_delete,
 	) ?;
 
@@ -110,17 +109,14 @@ pub fn gc_bundles (
 
 	compact_bundles (
 		output,
-		& repository,
+		& repository_core,
 		atomic_file_writer,
 		& all_index_entries,
 		& bundles_to_compact,
 		& other_chunks_seen,
 	) ?;
 
-	// clean up and return
-
-	repository.close (
-		output);
+	// return
 
 	Ok (true)
 
@@ -128,7 +124,7 @@ pub fn gc_bundles (
 
 fn get_all_index_entries (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	index_ids_and_sizes: & Vec <(IndexId, u64)>,
 	all_index_entries: & mut HashSet <(BundleId, ChunkId)>,
 ) -> Result <(), String> {
@@ -156,13 +152,13 @@ fn get_all_index_entries (
 			total_index_size);
 
 		let index_path =
-			repository.index_path (
+			repository_core.index_path (
 				index_id);
 
 		let index_entries =
 			index_read_path (
 				& index_path,
-				repository.encryption_key (),
+				repository_core.encryption_key (),
 			) ?;
 
 		for & RawIndexEntry {
@@ -197,7 +193,7 @@ fn get_all_index_entries (
 
 fn read_bundles_metadata (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	old_bundles: & Vec <BundleId>,
 	all_index_entries: & HashSet <(BundleId, ChunkId)>,
 	bundles_to_compact: & mut Vec <BundleId>,
@@ -223,13 +219,13 @@ fn read_bundles_metadata (
 			old_bundles_total);
 
 		let old_bundle_path =
-			repository.bundle_path (
+			repository_core.bundle_path (
 				old_bundle_id);
 
 		let old_bundle_info =
 			bundle_info_read_path (
 				old_bundle_path,
-				repository.encryption_key (),
+				repository_core.encryption_key (),
 			) ?;
 
 		let mut num_to_keep: u64 = 0;
@@ -302,7 +298,7 @@ fn read_bundles_metadata (
 
 fn delete_bundles (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	bundles_to_delete: & Vec <BundleId>,
 ) -> Result <(), String> {
 
@@ -326,7 +322,7 @@ fn delete_bundles (
 
 		io_result (
 			fs::remove_file (
-				repository.bundle_path (
+				repository_core.bundle_path (
 					bundle_to_delete)),
 		) ?;
 
@@ -342,7 +338,7 @@ fn delete_bundles (
 
 fn compact_bundles (
 	output: & Output,
-	repository: & Repository,
+	repository_core: & RepositoryCore,
 	atomic_file_writer: AtomicFileWriter,
 	all_index_entries: & HashSet <(BundleId, ChunkId)>,
 	bundles_to_compact: & Vec <BundleId>,
@@ -358,7 +354,7 @@ fn compact_bundles (
 	for & bundle_to_compact in bundles_to_compact {
 
 		let bundle_path =
-			repository.bundle_path (
+			repository_core.bundle_path (
 				bundle_to_compact);
 
 		let output_job =
@@ -371,7 +367,7 @@ fn compact_bundles (
 		let uncompacted_bundle =
 			bundle_read_path (
 				& bundle_path,
-				repository.encryption_key ()
+				repository_core.encryption_key ()
 			) ?;
 
 		output_job.remove ();
@@ -421,7 +417,7 @@ fn compact_bundles (
 
 		bundle_write_direct (
 			& mut compacted_bundle_file,
-			repository.encryption_key (),
+			repository_core.encryption_key (),
 			& compacted_bundle,
 			|chunks_written| {
 

@@ -7,6 +7,7 @@ use protobuf::stream::CodedInputStream;
 use misc::*;
 use zbackup::disk_format::*;
 
+#[ derive (Clone, Debug) ]
 pub struct DiskStorageInfo {
 	raw: protobuf_types::StorageInfo,
 }
