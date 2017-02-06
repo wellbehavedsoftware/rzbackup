@@ -104,6 +104,23 @@ impl fmt::Display for BundleId {
 
 }
 
+impl fmt::Debug for BundleId {
+
+	fn fmt (
+		& self,
+		formatter: & mut fmt::Formatter,
+	) -> Result <(), fmt::Error> {
+
+		write! (
+			formatter,
+			"BundleId ({})",
+			self,
+		)
+
+	}
+
+}
+
 /// A ZBackup chunk ID
 
 #[ derive (Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd) ]

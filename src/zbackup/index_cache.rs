@@ -19,13 +19,22 @@ use zbackup::data::*;
 use zbackup::disk_format::*;
 use zbackup::repository_core::*;
 
-#[ derive (Clone) ]
-pub struct IndexEntryData {
+/// The index cache loads and caches information from index files, namely a set
+/// of mappings from chunk IDs to bundle IDs, along with the size of the chunk's
+/// uncompressed data.
+
+pub struct IndexCache {
+	repository_core: Arc <RepositoryCore>,
+	entries: Option <HashMap <ChunkId, IndexEntry>>,
+}
+
+#[ derive (Clone, Copy, Debug) ]
+pub struct IndexEntry {
 	bundle_id: BundleId,
 	size: u64,
 }
 
-impl IndexEntryData {
+impl IndexEntry {
 
 	#[ inline ]
 	pub fn bundle_id (& self) -> BundleId {
@@ -39,16 +48,9 @@ impl IndexEntryData {
 
 }
 
-pub type IndexEntry = Arc <IndexEntryData>;
-
-pub struct IndexCache {
-	repository_core: Arc <RepositoryCore>,
-	entries: Option <HashMap <ChunkId, IndexEntry>>,
-}
-
 type IndexLoadFuture =
 	BoxFuture <
-		(IndexId, Vec <(ChunkId, IndexEntryData)>),
+		(IndexId, Vec <(ChunkId, IndexEntry)>),
 		(IndexId, String),
 	>;
 
@@ -217,7 +219,7 @@ impl IndexCache {
 
 						all_entries.insert (
 							chunk_id,
-							Arc::new (index_entry),
+							index_entry,
 						);
 
 					}
@@ -306,7 +308,7 @@ impl IndexCache {
 						repository_core.encryption_key ()),
 				) ?;
 
-			let mut raw_entries: Vec <(ChunkId, IndexEntryData)> =
+			let mut raw_entries: Vec <(ChunkId, IndexEntry)> =
 				Vec::new ();
 
 			for RawIndexEntry {
@@ -325,7 +327,7 @@ impl IndexCache {
 
 					raw_entries.push ((
 						chunk.chunk_id (),
-						IndexEntryData {
+						IndexEntry {
 							bundle_id: bundle_id,
 							size: chunk.size () as u64,
 						},
