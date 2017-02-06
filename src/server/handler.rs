@@ -238,7 +238,7 @@ fn handle_status (
 
 	io_result (write! (
 		writer,
-		"storage-manager:\n",
+		"chunk-cache:\n",
 	)) ?;
 
 	io_result (write! (
@@ -249,25 +249,25 @@ fn handle_status (
 	io_result (write! (
 		writer,
 		"  uncompressed-memory-items: {}\n",
-		status.storage_manager.uncompressed_memory_items,
+		status.chunk_cache.uncompressed_memory_items,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  compressed-memory-items: {}\n",
-		status.storage_manager.compressed_memory_items,
+		status.chunk_cache.compressed_memory_items,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  live-filesystem-items: {}\n",
-		status.storage_manager.live_filesystem_items,
+		status.chunk_cache.live_filesystem_items,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  dead-filesystem-items: {}\n",
-		status.storage_manager.dead_filesystem_items,
+		status.chunk_cache.dead_filesystem_items,
 	)) ?;
 
 	io_result (write! (
@@ -278,31 +278,31 @@ fn handle_status (
 	io_result (write! (
 		writer,
 		"  uncompressed-memory-hits: {}\n",
-		status.storage_manager.uncompressed_memory_hits,
+		status.chunk_cache.uncompressed_memory_hits,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  compressed-memory-hits: {}\n",
-		status.storage_manager.compressed_memory_hits,
+		status.chunk_cache.compressed_memory_hits,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  live-filesystem-hits: {}\n",
-		status.storage_manager.live_filesystem_hits,
+		status.chunk_cache.live_filesystem_hits,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  dead-filesystem-hits: {}\n",
-		status.storage_manager.dead_filesystem_hits,
+		status.chunk_cache.dead_filesystem_hits,
 	)) ?;
 
 	io_result (write! (
 		writer,
 		"  misses: {}\n",
-		status.storage_manager.misses,
+		status.chunk_cache.misses,
 	)) ?;
 
 	io_result (write! (

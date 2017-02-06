@@ -33,12 +33,12 @@ use rustc_serialize::hex::ToHex;
 
 use misc::*;
 use zbackup::bundle_loader::*;
+use zbackup::chunk_cache::*;
 use zbackup::data::*;
 use zbackup::disk_format::*;
 use zbackup::index_cache::*;
 use zbackup::randaccess::*;
 use zbackup::repository_core::*;
-use zbackup::storage::*;
 
 /// This is the main struct which implements the ZBackup restore functionality.
 /// It is multi-threaded, using a cpu pool internally, and it is fully thread
@@ -50,7 +50,7 @@ pub struct Repository {
 	state: Arc <Mutex <RepositoryState>>,
 	cpu_pool: CpuPool,
 	bundle_loader: BundleLoader,
-	storage_manager: StorageManager <ChunkId>,
+	chunk_cache: ChunkCache <ChunkId>,
 }
 
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
@@ -76,7 +76,7 @@ struct RepositoryData {
 
 pub struct RepositoryStatus {
 	pub bundle_loader: BundleLoaderStatus,
-	pub storage_manager: StorageManagerStatus,
+	pub chunk_cache: ChunkCacheStatus,
 }
 
 // bundle future
@@ -181,10 +181,10 @@ impl Repository {
 				repository_core.clone (),
 				repository_config.max_threads);
 
-		// create storage manager
+		// create chunk cache
 
-		let storage_manager =
-			StorageManager::new (
+		let chunk_cache =
+			ChunkCache::new (
 				repository_config.filesystem_cache_path.clone (),
 				repository_config.max_threads,
 				repository_config.max_uncompressed_memory_cache_entries,
@@ -219,7 +219,7 @@ impl Repository {
 			state: repository_state,
 			cpu_pool: cpu_pool,
 			bundle_loader: bundle_loader,
-			storage_manager: storage_manager,
+			chunk_cache: chunk_cache,
 		})
 
 	}
@@ -864,13 +864,13 @@ impl Repository {
 
 		}
 
-		// lookup via storage manager
+		// lookup via chunk cache
 
 		let debug_clone =
 			debug.clone ();
 
 		if let Some (chunk_data_future) =
-			self.storage_manager.get (
+			self.chunk_cache.get (
 				debug,
 				& chunk_id,
 			) {
@@ -969,7 +969,7 @@ impl Repository {
 						for (chunk_id, chunk_data)
 						in chunk_map.iter () {
 
-							self_clone.storage_manager.insert (
+							self_clone.chunk_cache.insert (
 								* chunk_id,
 								chunk_data.clone (),
 								false,
@@ -982,7 +982,7 @@ impl Repository {
 					if let Some (chunk_data) =
 						chunk_map.get (& chunk_id) {
 
-						self_clone.storage_manager.insert (
+						self_clone.chunk_cache.insert (
 							chunk_id,
 							chunk_data.clone (),
 							true,
@@ -1187,8 +1187,8 @@ impl Repository {
 			bundle_loader:
 				self.bundle_loader.status (),
 
-			storage_manager:
-				self.storage_manager.status (),
+			chunk_cache:
+				self.chunk_cache.status (),
 
 		}
 

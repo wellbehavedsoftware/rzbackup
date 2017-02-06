@@ -27,22 +27,34 @@ use output::Output;
 use rand;
 use rand::Rng;
 
-pub trait StorageManagerKey: Clone + Eq + Hash + Send + Sync + 'static {
+/// The chunk cache provides a tiered cache for individual chunks. These are
+/// stored in memory, compressed and uncompressed, and in the filesyste,
+/// compressed. The compression is LZO for speed and the cache uses a simple
+/// least-recently-used policy.
+///
+/// The disk cache is split into two, with one typically large area reserved for
+/// chunks which have actually been used, and another smaller one for those
+/// which have been uncompressed but have not been used. The large area for used
+/// chunks greatly improves efficiency over time, while the smaller cache for
+/// unused chunks improves decompression when the cache is cold or when
+/// restoring new backups.
+
+#[ derive (Clone) ]
+pub struct ChunkCache <Key: ChunkCacheKey> {
+	data: Arc <ChunkCacheData>,
+	state: Arc <Mutex <ChunkCacheState <Key>>>,
+	cpu_pool: CpuPool,
 }
 
-impl <Type> StorageManagerKey for Type
+pub trait ChunkCacheKey: Clone + Eq + Hash + Send + Sync + 'static {
+}
+
+impl <Type> ChunkCacheKey for Type
 where Type: Clone + Eq + Hash + Send + Sync + 'static {
 }
 
 #[ derive (Clone) ]
-pub struct StorageManager <Key: StorageManagerKey> {
-	data: Arc <StorageManagerData>,
-	state: Arc <Mutex <StorageManagerState <Key>>>,
-	cpu_pool: CpuPool,
-}
-
-#[ derive (Clone) ]
-struct StorageManagerData {
+struct ChunkCacheData {
 	path: PathBuf,
 	debug: bool,
 }
@@ -53,7 +65,7 @@ enum MemoryCacheItem {
 	Uncompressed (Arc <Vec <u8>>),
 }
 
-struct StorageManagerState <Key: StorageManagerKey> {
+struct ChunkCacheState <Key: ChunkCacheKey> {
 
 	uncompressed_memory_items: LruCache <Key, Arc <Vec <u8>>>,
 	compressed_memory_items: LruCache <Key, MemoryCacheItem>,
@@ -69,14 +81,14 @@ struct StorageManagerState <Key: StorageManagerKey> {
 }
 
 struct FilesystemItem {
-	storage_manager: Arc <StorageManagerData>,
+	storage_manager: Arc <ChunkCacheData>,
 	filename: String,
 	compressed: bool,
 	uncompressed_size: usize,
 	stored_size: usize,
 }
 
-pub struct StorageManagerStatus {
+pub struct ChunkCacheStatus {
 
 	pub uncompressed_memory_items: u64,
 	pub compressed_memory_items: u64,
@@ -91,7 +103,7 @@ pub struct StorageManagerStatus {
 
 }
 
-impl <Key: StorageManagerKey> StorageManager <Key> {
+impl <Key: ChunkCacheKey> ChunkCache <Key> {
 
 	#[ inline ]
 	pub fn new <PathRef: AsRef <Path>> (
@@ -102,7 +114,7 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 		live_filesystem_cache_size: usize,
 		dead_filesystem_cache_size: usize,
 		debug: bool,
-	) -> Result <StorageManager <Key>, String> {
+	) -> Result <ChunkCache <Key>, String> {
 
 		Self::new_impl (
 			path_ref.as_ref (),
@@ -124,7 +136,7 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 		live_filesystem_cache_size: usize,
 		dead_filesystem_cache_size: usize,
 		debug: bool,
-	) -> Result <StorageManager <Key>, String> {
+	) -> Result <ChunkCache <Key>, String> {
 
 		// try and create filesystem cache path
 
@@ -165,17 +177,17 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 
 		// TODO create a test file to check permissions
 
-		Ok (StorageManager {
+		Ok (ChunkCache {
 
 			data: Arc::new (
-				StorageManagerData {
+				ChunkCacheData {
 					path: path.to_owned (),
 					debug: debug,
 				}),
 
 			state: Arc::new (
 				Mutex::new (
-					StorageManagerState {
+					ChunkCacheState {
 
 				uncompressed_memory_items:
 					LruCache::new (
@@ -456,7 +468,7 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 	fn get_compressed (
 		& self,
 		debug: & Output,
-		self_state: & mut StorageManagerState <Key>,
+		self_state: & mut ChunkCacheState <Key>,
 		key: & Key,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
 
@@ -620,7 +632,7 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 
 	fn get_filesystem (
 		& self,
-		self_state: & mut StorageManagerState <Key>,
+		self_state: & mut ChunkCacheState <Key>,
 		key: & Key,
 	) -> Option <BoxFuture <Arc <Vec <u8>>, String>> {
 
@@ -728,12 +740,12 @@ impl <Key: StorageManagerKey> StorageManager <Key> {
 
 	pub fn status (
 		& self,
-	) -> StorageManagerStatus {
+	) -> ChunkCacheStatus {
 
 		let self_state =
 			self.state.lock ().unwrap ();
 
-		StorageManagerStatus {
+		ChunkCacheStatus {
 
 			uncompressed_memory_items:
 				self_state.uncompressed_memory_items.len () as u64,
