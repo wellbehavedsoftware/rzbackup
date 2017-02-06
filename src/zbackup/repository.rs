@@ -19,12 +19,8 @@ use rust_crypto::sha2::Sha256;
 use futures;
 use futures::BoxFuture;
 use futures::Future;
-use futures::future::Shared as SharedFuture;
-use futures::sync::oneshot;
 
 use futures_cpupool::CpuPool;
-
-use lru_cache::LruCache;
 
 use num_cpus;
 
@@ -58,7 +54,6 @@ pub struct Repository {
 }
 
 type ChunkMap = Arc <HashMap <ChunkId, ChunkData>>;
-type ChunkCache = LruCache <ChunkId, ChunkData>;
 
 /// This controls the configuration of a repository, and is passed to the `open`
 /// constructor.
@@ -86,44 +81,11 @@ pub struct RepositoryStatus {
 
 // bundle future
 
-type BundleFutureResult =
-	Result <ChunkMap, String>;
-
-type BundleFutureSender =
-	oneshot::Receiver <BundleFutureResult>;
-
-type BundleFutureReceiver =
-	CloningSharedFuture <oneshot::Receiver <BundleFutureResult>>;
-
-// bundle double future
-
-type BundleDoubleFuture =
-	oneshot::Receiver <BundleFutureReceiver>;
-
-type BundleDoubleFutureSender =
-	oneshot::Sender <BundleDoubleFuture>;
-
-type BundleDoubleFutureReceiver =
-	CloningSharedFuture <BundleDoubleFuture>;
-
-type BundleDoubleFutureChannel = (
-	BundleDoubleFutureSender,
-	BundleDoubleFutureReceiver,
-);
-
-
-
 type ChunkFuture =
 	BoxFuture <ChunkData, String>;
 
 type ChunkDoubleFuture =
 	BoxFuture <ChunkFuture, String>;
-
-type ChunkShared =
-	SharedFuture <ChunkFuture>;
-
-type ChunkSharedShared =
-	SharedFuture <BoxFuture <ChunkShared, String>>;
 
 struct RepositoryState {
 	index_cache: IndexCache,
