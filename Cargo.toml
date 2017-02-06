@@ -9,7 +9,7 @@
 	repository = "https://gitlab.wellbehavedsoftware.com/well-behaved-software/rzbackup"
 	readme = "README.md"
 
-	build = "src/build.rs"
+	build = "build.rs"
 
 	exclude = [
 		"src/zbackup/metadata.rs",
