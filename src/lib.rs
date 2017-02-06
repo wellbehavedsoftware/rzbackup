@@ -54,13 +54,14 @@ pub mod convert;
 pub mod server;
 
 mod compress;
+mod metadata;
 mod zbackup;
 
-pub use ::misc::AtomicFileWriter;
+pub use metadata::*;
+pub use misc::AtomicFileWriter;
 pub use zbackup::crypto;
 pub use zbackup::data::*;
 pub use zbackup::disk_format;
-pub use zbackup::metadata::*;
 pub use zbackup::randaccess::RandomAccess;
 pub use zbackup::repository::Repository as ZBackupRepository;
 pub use zbackup::repository::RepositoryConfig as ZBackupRepositoryConfig;

@@ -45,7 +45,7 @@ fn write_metadata (
 
 	let mut file =
 		File::create (
-			"src/zbackup/metadata.rs",
+			"src/metadata.rs",
 		) ?;
 
 	writeln! (
