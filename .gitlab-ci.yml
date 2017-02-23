@@ -6,8 +6,9 @@ pages:
 
   script:
 
-    - "cd website; pip install -r requirements.txt"
-    - "cd website; pelican -s publishconf.py"
+    - "cd website"
+    - "pip install -r requirements.txt"
+    - "pelican -s publishconf.py"
 
   artifacts:
 
