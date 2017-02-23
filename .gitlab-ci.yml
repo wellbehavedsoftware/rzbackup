@@ -1,0 +1,18 @@
+---
+
+image: python:2.7-alpine
+
+pages:
+
+  script:
+
+    - "cd website; pip install -r requirements.txt"
+    - "cd website; pelican -s publishconf.py"
+
+  artifacts:
+
+    paths:
+
+      - "public/"
+
+# ex: et ts=2 filetype=yaml
