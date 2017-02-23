@@ -9,11 +9,12 @@ pages:
     - "cd website"
     - "pip install -r requirements.txt"
     - "pelican -s publishconf.py"
+    - "mv public ../"
 
   artifacts:
 
     paths:
 
-      - "website/public/"
+      - "public/"
 
 # ex: et ts=2 filetype=yaml
