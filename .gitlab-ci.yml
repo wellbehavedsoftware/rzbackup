@@ -14,6 +14,6 @@ pages:
 
     paths:
 
-      - "public/"
+      - "website/public/"
 
 # ex: et ts=2 filetype=yaml
