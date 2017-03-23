@@ -249,7 +249,7 @@ impl BundleLoader {
 		self_state.thread_sender.clone ().unwrap ().send (
 			self_state.cpu_pool.clone ().unwrap ().spawn_fn (move || {
 
-			bundle_sender.complete (
+			bundle_sender.send (
 				self_clone.load_bundle_impl (
 					bundle_id));
 
@@ -301,7 +301,7 @@ impl BundleLoader {
 						& bundle_id,
 					).unwrap ();
 
-				bundle_future_channel.sender.complete (
+				bundle_future_channel.sender.send (
 					bundle_receiver);
 
 			} else {
