@@ -251,7 +251,10 @@ impl BundleLoader {
 
 			bundle_sender.send (
 				self_clone.load_bundle_impl (
-					bundle_id));
+					bundle_id),
+			).map_err (
+				|_| "Should never happen"
+			).unwrap ();
 
 			let mut self_state =
 				self_clone.state.lock ().unwrap ();
@@ -302,7 +305,10 @@ impl BundleLoader {
 					).unwrap ();
 
 				bundle_future_channel.sender.send (
-					bundle_receiver);
+					bundle_receiver,
+				).map_err (
+					|_| "Should never happen"
+				).unwrap ();
 
 			} else {
 				break;

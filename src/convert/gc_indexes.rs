@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 use clap;
@@ -10,11 +9,11 @@ use rand::Rng;
 
 use rustc_serialize::hex::ToHex;
 
-use ::convert::utils::*;
-use ::misc::*;
-use ::zbackup::data::*;
-use ::zbackup::disk_format::*;
-use ::zbackup::repository::*;
+use convert::utils::*;
+use misc::*;
+use zbackup::data::*;
+use zbackup::disk_format::*;
+use zbackup::repository::*;
 
 pub fn gc_indexes (
 	output: & Output,
@@ -52,77 +51,29 @@ pub fn gc_indexes (
 
 	// get list of index files
 
-	let output_job =
-		output_job_start! (
-			output,
-			"Scanning indexes");
-
-	let old_index_ids_and_sizes =
-		scan_index_files_with_sizes (
-			& arguments.repository_path,
-		) ?;
-
-	let total_index_size: u64 =
-		old_index_ids_and_sizes.iter ().map (
-			|& (_, old_index_size)|
-			old_index_size
-		).sum ();
-
-	output_job_replace! (
-		output_job,
-		"Found {} index files",
-		old_index_ids_and_sizes.len ());
+	scan_indexes_with_sizes! (
+		output,
+		arguments.repository_path,
+		old_index_ids_and_sizes,
+		total_index_size,
+	);
 
 	// get list of backup files
 
-	let output_job =
-		output_job_start! (
-			output,
-			"Scanning backups");
-
 	let backup_files =
-		scan_backup_files (
+		scan_backups (
+			output,
 			& arguments.repository_path,
 		) ?;
 
-	output_job_replace! (
-		output_job,
-		"Found {} backup files",
-		backup_files.len ());
-
 	// get a list of chunks used by backups
 
-	let output_job =
-		output_job_start! (
+	let backup_chunk_ids =
+		get_recursive_chunks (
 			output,
-			"Reading backups");
-
-	let mut backup_chunk_ids: HashSet <ChunkId> =
-		HashSet::new ();
-
-	let mut backup_count: u64 = 0;
-	let backup_total = backup_files.len () as u64;
-
-	for backup_file in backup_files {
-
-		output_job.progress (
-			backup_count,
-			backup_total);
-
-		collect_chunks_from_backup (
 			& repository,
-			& mut backup_chunk_ids,
-			& backup_file,
+			& backup_files,
 		) ?;
-
-		backup_count += 1;
-
-	}
-
-	output_job_replace! (
-		output_job,
-		"Found {} chunks referenced by backups",
-		backup_chunk_ids.len ());
 
 	// process indexes
 

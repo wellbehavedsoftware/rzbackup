@@ -8,8 +8,6 @@ use std::vec;
 
 use clap;
 
-use futures;
-use futures::BoxFuture;
 use futures::Future;
 use futures_cpupool::CpuPool;
 
@@ -20,8 +18,10 @@ use output::OutputJob;
 
 use convert::utils::*;
 use misc::*;
+use misc::args::ClapSubCommandRzbackupArgs;
 use zbackup::data::*;
 use zbackup::disk_format::*;
+use zbackup::repository::*;
 use zbackup::repository_core::*;
 
 pub fn balance_bundles (
@@ -32,18 +32,70 @@ pub fn balance_bundles (
 	let minimum_chunk_count: u64 =
 		arguments.chunks_per_bundle * arguments.fill_factor / 100;
 
-	// open repository
+	let repository_core;
+	let backup_chunk_ids;
 
-	let repository_core =
-		string_result_with_prefix (
-			|| format! (
-				"Error opening repository {}: ",
-				arguments.repository_path.to_string_lossy ()),
-			RepositoryCore::open (
-				& output,
-				& arguments.repository_path,
-				arguments.password_file_path.clone ()),
+	if arguments.cluster_backups {
+
+		// open repository
+
+		let repository =
+			string_result_with_prefix (
+				|| format! (
+					"Error opening repository {}: ",
+					arguments.repository_path.to_string_lossy ()),
+				Repository::open (
+					& output,
+					arguments.repository_config.clone (),
+					& arguments.repository_path,
+					arguments.password_file_path.clone ()),
+			) ?;
+
+		repository_core =
+			repository.core ().clone ();
+
+		// load indexes
+
+		repository.load_indexes (
+			output,
 		) ?;
+
+		// get list of backup files
+
+		let backup_files =
+			scan_backups (
+				output,
+				& arguments.repository_path,
+			) ?;
+
+		// get a list of chunks used by backups
+
+		backup_chunk_ids =
+			get_recursive_chunks (
+				output,
+				& repository,
+				& backup_files,
+			) ?;
+
+	} else {
+
+		// open repository
+
+		repository_core =
+			string_result_with_prefix (
+				|| format! (
+					"Error opening repository {}: ",
+					arguments.repository_path.to_string_lossy ()),
+				RepositoryCore::open (
+					& output,
+					& arguments.repository_path,
+					arguments.password_file_path.clone ()),
+			) ?;
+
+		backup_chunk_ids =
+			HashSet::new ()
+
+	};
 
 	// create cpu pool
 
@@ -92,15 +144,17 @@ pub fn balance_bundles (
 				& arguments,
 				minimum_chunk_count,
 				& old_index_ids_and_sizes,
+				& backup_chunk_ids,
 				& mut unbalanced_indexes,
 				& mut new_bundles_total,
 			) ?;
 
-			// do nothing if there is only one small bundle
+			// do nothing if there is only one unbalanced bundle
 
 			if count_unbalanced_bundles (
 				minimum_chunk_count,
 				arguments.chunks_per_bundle,
+				& backup_chunk_ids,
 				& unbalanced_indexes,
 			) < 2 {
 
@@ -122,6 +176,7 @@ pub fn balance_bundles (
 				& atomic_file_writer,
 				& arguments,
 				minimum_chunk_count,
+				& backup_chunk_ids,
 				unbalanced_indexes,
 				new_bundles_total,
 			) ? {
@@ -160,6 +215,7 @@ fn read_indexes_find_unbalanced (
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
 	old_index_ids_and_sizes: & Vec <(IndexId, u64)>,
+	backup_chunk_ids: & HashSet <ChunkId>,
 	unbalanced_indexes: & mut Vec <(IndexId, Vec <RawIndexEntry>)>,
 	new_bundles_total: & mut u64,
 ) -> Result <(), String> {
@@ -226,15 +282,56 @@ fn read_indexes_find_unbalanced (
 				|& RawIndexEntry {
 					index_bundle_header: ref _old_index_bundle_header,
 					bundle_info: ref old_index_bundle_info,
-				}|
+				}| {
 
-				old_index_bundle_info.num_chunks ()
+				let old_index_backup_chunk_ids: HashSet <ChunkId> =
+					old_index_bundle_info.chunks ().map (
+						|old_index_bundle_info_chunk|
 
-			).filter (
-				|& chunk_count|
+						old_index_bundle_info_chunk.chunk_id ()
 
-				chunk_count < minimum_chunk_count
-				|| chunk_count > arguments.chunks_per_bundle
+					).collect ();
+
+				let old_index_num_backup_chunks =
+					old_index_backup_chunk_ids.intersection (
+						backup_chunk_ids,
+					).count () as u64;
+
+				(
+					old_index_num_backup_chunks,
+					old_index_bundle_info.num_chunks ()
+						- old_index_num_backup_chunks,
+				)
+
+			}).filter (
+				|& (
+					old_index_backup_chunk_count,
+					old_index_non_backup_chunk_count,
+				)| {
+
+				let old_index_total_chunk_count =
+					old_index_backup_chunk_count
+						+ old_index_non_backup_chunk_count;
+
+				(
+
+					old_index_backup_chunk_count > 0
+					&& old_index_non_backup_chunk_count > 0
+
+				) || (
+
+					old_index_total_chunk_count
+						< minimum_chunk_count
+
+					|| old_index_total_chunk_count
+						> arguments.chunks_per_bundle
+
+				)
+
+			}).map (
+				|(backup_chunk_count, non_backup_chunk_count)|
+
+				backup_chunk_count + non_backup_chunk_count
 
 			).sum ();
 
@@ -265,8 +362,10 @@ fn read_indexes_find_unbalanced (
 
 	output_message! (
 		output,
-		"Found {} chunks to balance into {} bundles",
+		"Found {} chunks in {} {} to balance into {} bundles",
 		unbalanced_chunks_count,
+		unbalanced_indexes.len (),
+		if unbalanced_indexes.len () == 1 { "index" } else { "indexes" },
 		new_bundles_total);
 
 	Ok (())
@@ -276,6 +375,7 @@ fn read_indexes_find_unbalanced (
 fn count_unbalanced_bundles (
 	minimum_chunk_count: u64,
 	maximum_chunk_count: u64,
+	backup_chunk_ids: & HashSet <ChunkId>,
 	unbalanced_indexes: & [(IndexId, Vec <RawIndexEntry>)],
 ) -> u64 {
 
@@ -289,8 +389,34 @@ fn count_unbalanced_bundles (
 					..
 				}| {
 
-				bundle_info.num_chunks () < minimum_chunk_count
-				|| bundle_info.num_chunks () > maximum_chunk_count
+				let bundle_backup_chunk_ids: HashSet <ChunkId> =
+					bundle_info.chunks ().map (
+						|bundle_info_chunk|
+
+						bundle_info_chunk.chunk_id ()
+
+					).collect ();
+
+				let bundle_num_backup_chunks =
+					bundle_backup_chunk_ids.intersection (
+						backup_chunk_ids,
+					).count () as u64;
+
+				let bundle_num_non_backup_chunks =
+					bundle_info.num_chunks ()
+						- bundle_num_backup_chunks;
+
+				(
+
+					bundle_num_backup_chunks > 0
+					&& bundle_num_non_backup_chunks > 0
+
+				) || (
+
+					bundle_info.num_chunks () < minimum_chunk_count
+					|| bundle_info.num_chunks () > maximum_chunk_count
+
+				)
 
 			}).map (
 				|& RawIndexEntry {
@@ -316,6 +442,7 @@ fn balance_bundles_real (
 	atomic_file_writer: & AtomicFileWriter,
 	arguments: & BalanceBundlesArguments,
 	minimum_chunk_count: u64,
+	backup_chunk_ids: & HashSet <ChunkId>,
 	unbalanced_indexes: Vec <(IndexId, Vec <RawIndexEntry>)>,
 	new_bundles_total: u64,
 ) -> Result <bool, String> {
@@ -331,20 +458,6 @@ fn balance_bundles_real (
 	let checkpoint_time =
 		start_time + arguments.checkpoint_time;
 
-	let mut new_bundles_count: u64 = 0;
-
-	let mut pending_chunks: Vec <(ChunkId, Vec <u8>)> =
-		Vec::new ();
-
-	let mut pending_index_entries: Vec <RawIndexEntry> =
-		Vec::new ();
-
-	let mut index_iterator: vec::IntoIter <(IndexId, Vec <RawIndexEntry>)> =
-		unbalanced_indexes.into_iter ();
-
-	let mut index_entry_iterator: vec::IntoIter <RawIndexEntry> =
-		Vec::new ().into_iter ();
-
 	enum Task {
 
 		ReadBundle {
@@ -359,216 +472,296 @@ fn balance_bundles_real (
 
 	}
 
-	let mut task_futures: Vec <BoxFuture <Task, String>> =
-		Vec::new ();
+	struct State {
+		new_bundles_count: u64,
+		pending_backup_chunks: Vec <(ChunkId, Vec <u8>)>,
+		pending_non_backup_chunks: Vec <(ChunkId, Vec <u8>)>,
+		pending_index_entries: Vec <RawIndexEntry>,
+		index_iterator: vec::IntoIter <(IndexId, Vec <RawIndexEntry>)>,
+		index_entry_iterator: vec::IntoIter <RawIndexEntry>,
+	}
 
-	output.pause ();
+	let mut state = State {
+		new_bundles_count: 0,
+		pending_backup_chunks: Vec::new (),
+		pending_non_backup_chunks: Vec::new (),
+		pending_index_entries: Vec::new (),
+		index_iterator: unbalanced_indexes.into_iter (),
+		index_entry_iterator: Vec::new ().into_iter (),
+	};
 
-	loop {
+	// concurrent operation
 
-		let now =
-			Instant::now ();
+	concurrent_controller (
+		output,
+		max_tasks,
+		& mut state,
+		|state| {
 
-		// write bundles
+			// write bundles
 
-		while task_futures.len () < max_tasks
-		&& pending_chunks.len () >= arguments.chunks_per_bundle as usize {
+			if (
 
-			let mut bundle_chunks =
-				pending_chunks.split_off (
-					arguments.chunks_per_bundle as usize);
+				state.pending_backup_chunks.len ()
+					>= arguments.chunks_per_bundle as usize
 
-			mem::swap (
-				& mut bundle_chunks,
-				& mut pending_chunks);
+				|| state.pending_non_backup_chunks.len ()
+					>= arguments.chunks_per_bundle as usize
 
-			let repository_core = repository_core.clone ();
-			let atomic_file_writer = atomic_file_writer.clone ();
+			) {
 
-			let output_job_write_bundle =
-				output_job_start! (
-					output,
-					"Writing bundle {} of {}",
-					new_bundles_count + 1,
-					new_bundles_total);
+				let mut bundle_chunks;
 
-			task_futures.push (
-				cpu_pool.spawn_fn (move || {
+				if state.pending_backup_chunks.len ()
+					>= arguments.chunks_per_bundle as usize {
 
-				flush_bundle (
-					& output_job_write_bundle,
-					& repository_core,
-					atomic_file_writer,
-					& bundle_chunks,
-				).map (
-					|index_entry|
+					bundle_chunks =
+						state.pending_backup_chunks.split_off (
+							arguments.chunks_per_bundle as usize);
 
-					Task::WriteBundle {
-						output_job: output_job_write_bundle,
-						index_entry: index_entry
-					}
-
-				)
-
-			}).boxed ());
-
-			new_bundles_count += 1;
-
-		}
-
-		// read bundles
-
-		while task_futures.len () < max_tasks
-		&& now < checkpoint_time {
-
-			if let Some (RawIndexEntry {
-				index_bundle_header,
-				bundle_info,
-			}) = index_entry_iterator.next () {
-
-				if bundle_info.num_chunks ()
-					>= minimum_chunk_count
-
-				&& bundle_info.num_chunks ()
-					<= arguments.chunks_per_bundle {
-
-					pending_index_entries.push (
-						RawIndexEntry {
-							index_bundle_header: index_bundle_header,
-							bundle_info: bundle_info,
-						}
-					);
+					mem::swap (
+						& mut bundle_chunks,
+						& mut state.pending_backup_chunks);
 
 				} else {
 
-					let bundle_path =
-						repository_core.bundle_path (
-							index_bundle_header.bundle_id ());
+					bundle_chunks =
+						state.pending_non_backup_chunks.split_off (
+							arguments.chunks_per_bundle as usize);
 
-					atomic_file_writer.delete (
-						bundle_path.clone ());
+					mem::swap (
+						& mut bundle_chunks,
+						& mut state.pending_non_backup_chunks);
 
-					let encryption_key =
-						repository_core.encryption_key ();
+				};
 
-					let output_job_read_bundle =
-						output_job_start! (
-							output,
-							"Reading bundle {}",
-							index_bundle_header.bundle_id ());
+				let repository_core = repository_core.clone ();
+				let atomic_file_writer = atomic_file_writer.clone ();
 
-					task_futures.push (
-						cpu_pool.spawn_fn (move || {
+				let output_job_write_bundle =
+					output_job_start! (
+						output,
+						"Writing bundle {} of {}",
+						state.new_bundles_count + 1,
+						new_bundles_total);
 
-						let bundle_chunks =
-							bundle_read_path (
-								& bundle_path,
-								encryption_key,
-							) ?;
+				let task = (
+					cpu_pool.spawn_fn (move || {
 
-						Ok (Task::ReadBundle {
-							output_job: output_job_read_bundle,
-							chunks: bundle_chunks,
-						})
+					flush_bundle (
+						& output_job_write_bundle,
+						& repository_core,
+						atomic_file_writer,
+						& bundle_chunks,
+					).map (
+						|index_entry|
 
-					}).boxed ())
+						Task::WriteBundle {
+							output_job: output_job_write_bundle,
+							index_entry: index_entry
+						}
 
-				}
+					)
 
-			} else if let Some ((index_id, index_entries)) =
-				index_iterator.next () {
+				}).boxed ());
 
-				atomic_file_writer.delete (
-					repository_core.index_path (
-						index_id));
+				state.new_bundles_count += 1;
 
-				index_entry_iterator = index_entries.into_iter ();
-
-			} else {
-
-				break;
+				return Some (task);
 
 			}
 
-		}
+			// read bundles
 
-		// wait for background tasks
+			if checkpoint_time <= Instant::now () {
+				return None;
+			}
 
-		if task_futures.is_empty () {
-			break;
-		}
+			loop {
 
-		output.unpause ();
+				if let Some (RawIndexEntry {
+					index_bundle_header,
+					bundle_info,
+				}) = state.index_entry_iterator.next () {
 
-		let (task_value, _index, remaining_tasks) =
-			futures::select_all (
-				task_futures,
-			).wait ().map_err (
-				|(error, _index, _remaining_tasks)|
+					let bundle_backup_chunk_ids: HashSet <ChunkId> =
+						bundle_info.chunks ().map (
+							|bundle_info_chunk|
 
-				error
+							bundle_info_chunk.chunk_id ()
 
-			) ?;
+						).collect ();
 
-		task_futures = remaining_tasks;
+					let bundle_num_backup_chunks =
+						bundle_backup_chunk_ids.intersection (
+							& backup_chunk_ids,
+						).count () as u64;
 
-		output.pause ();
+					let bundle_num_non_backup_chunks =
+						bundle_info.num_chunks ()
+							- bundle_num_backup_chunks;
 
-		// process background task
+					if (
 
-		match task_value {
+						bundle_num_backup_chunks == 0
+						|| bundle_num_non_backup_chunks == 0
 
-			Task::ReadBundle {
-				output_job: output_job_read_bundle,
-				chunks: bundle_chunks,
-			} => {
+					) && (
 
-				output_job_read_bundle.remove ();
+						bundle_info.num_chunks ()
+							>= minimum_chunk_count
 
-				for bundle_chunk in bundle_chunks {
-					pending_chunks.push (
-						bundle_chunk);
+						&& bundle_info.num_chunks ()
+							<= arguments.chunks_per_bundle
+
+					) {
+
+						state.pending_index_entries.push (
+							RawIndexEntry {
+								index_bundle_header: index_bundle_header,
+								bundle_info: bundle_info,
+							}
+						);
+
+					} else {
+
+						let bundle_path =
+							repository_core.bundle_path (
+								index_bundle_header.bundle_id ());
+
+						atomic_file_writer.delete (
+							bundle_path.clone ());
+
+						let encryption_key =
+							repository_core.encryption_key ();
+
+						let output_job_read_bundle =
+							output_job_start! (
+								output,
+								"Reading bundle {}",
+								index_bundle_header.bundle_id ());
+
+						return Some (
+							cpu_pool.spawn_fn (move || {
+
+							let bundle_chunks =
+								bundle_read_path (
+									& bundle_path,
+									encryption_key,
+								) ?;
+
+							Ok (Task::ReadBundle {
+								output_job: output_job_read_bundle,
+								chunks: bundle_chunks,
+							})
+
+						}).boxed ());
+
+					}
+
+				} else if let Some ((index_id, index_entries)) =
+					state.index_iterator.next () {
+
+					atomic_file_writer.delete (
+						repository_core.index_path (
+							index_id));
+
+					state.index_entry_iterator =
+						index_entries.into_iter ();
+
+				} else {
+
+					return None;
+
 				}
 
-			},
+			}
 
-			Task::WriteBundle {
-				output_job: output_job_write_bundle,
-				index_entry,
-			} => {
+		},
 
-				output_job_write_bundle.remove ();
+		|state, task_value| {
 
-				pending_index_entries.push (
-					index_entry);
+			// process background task
 
-			},
+			match task_value {
 
-		}
+				Task::ReadBundle {
+					output_job: output_job_read_bundle,
+					chunks: bundle_chunks,
+				} => {
 
-		// end for checkpoint or no more work
+					output_job_read_bundle.remove ();
 
-		if task_futures.is_empty ()
-		&& checkpoint_time < now {
-			break;
-		}
+					for (
+						bundle_chunk_id,
+						bundle_chunk_data,
+					) in bundle_chunks {
 
-	}
+						if backup_chunk_ids.contains (
+							& bundle_chunk_id,
+						) {
+
+							state.pending_backup_chunks.push (
+								(
+									bundle_chunk_id,
+									bundle_chunk_data,
+								),
+							);
+
+						} else {
+
+							state.pending_non_backup_chunks.push (
+								(
+									bundle_chunk_id,
+									bundle_chunk_data,
+								),
+							);
+
+						}
+
+					}
+
+				},
+
+				Task::WriteBundle {
+					output_job: output_job_write_bundle,
+					index_entry,
+				} => {
+
+					output_job_write_bundle.remove ();
+
+					state.pending_index_entries.push (
+						index_entry);
+
+				},
+
+			}
+
+			Ok (())
+
+		},
+
+	) ?;
 
 	output.unpause ();
 
 	// write final bundle
 
-	if new_bundles_count == new_bundles_total - 1 {
+	let mut pending_chunks: Vec <(ChunkId, Vec <u8>)> =
+		state.pending_backup_chunks.into_iter ().chain (
+			state.pending_non_backup_chunks,
+		).collect ();
+
+	if state.new_bundles_count == new_bundles_total - 1 {
 
 		let output_job_final_bundle =
 			output_job_start! (
 				output,
 				"Writing bundle {} of {}",
-				new_bundles_count + 1,
+				state.new_bundles_count + 1,
 				new_bundles_total);
 
-		pending_index_entries.push (
+		state.pending_index_entries.push (
 			flush_bundle (
 				& output_job_final_bundle,
 				& repository_core,
@@ -581,19 +774,19 @@ fn balance_bundles_real (
 
 		output_job_final_bundle.remove ();
 
-		new_bundles_count += 1;
+		state.new_bundles_count += 1;
 
 	}
 
 	output_job_replace! (
 		output_job,
 		"Balanced {} out of {} bundles",
-		new_bundles_count,
+		state.new_bundles_count,
 		new_bundles_total);
 
 	// perform checkpoint
 
-	if new_bundles_count < new_bundles_total {
+	if state.new_bundles_count < new_bundles_total {
 
 		if ! pending_chunks.is_empty () {
 
@@ -602,7 +795,7 @@ fn balance_bundles_real (
 					output,
 					"Writing remaining chunks for checkpoint");
 
-			pending_index_entries.push (
+			state.pending_index_entries.push (
 				flush_bundle (
 					& output_job_checkpoint,
 					& repository_core,
@@ -615,9 +808,9 @@ fn balance_bundles_real (
 
 		}
 
-		for index_entry in index_entry_iterator {
+		for index_entry in state.index_entry_iterator {
 
-			pending_index_entries.push (
+			state.pending_index_entries.push (
 				index_entry);
 
 		}
@@ -630,7 +823,7 @@ fn balance_bundles_real (
 		output,
 		& repository_core,
 		& atomic_file_writer,
-		& pending_index_entries,
+		& state.pending_index_entries,
 	) ?;
 
 	// commit changes
@@ -650,7 +843,7 @@ fn balance_bundles_real (
 
 	// return
 
-	Ok (new_bundles_count == new_bundles_total)
+	Ok (state.new_bundles_count == new_bundles_total)
 
 }
 
@@ -749,10 +942,12 @@ command! (
 	arguments = BalanceBundlesArguments {
 		repository_path: PathBuf,
 		password_file_path: Option <PathBuf>,
+		repository_config: RepositoryConfig,
 		chunks_per_bundle: u64,
 		fill_factor: u64,
 		checkpoint_time: Duration,
 		sleep_time: Duration,
+		cluster_backups: bool,
 	},
 
 	clap_subcommand = {
@@ -820,6 +1015,16 @@ command! (
 
 			)
 
+			.arg (
+				clap::Arg::with_name ("cluster-backups")
+
+				.long ("cluster-backups")
+				.help ("Cluster chunks required to expand backups")
+
+			)
+
+			.repository_config_args ()
+
 	},
 
 	clap_arguments_parse = |clap_matches| {
@@ -835,6 +1040,10 @@ command! (
 				args::path_optional (
 					& clap_matches,
 					"password-file"),
+
+			repository_config:
+				args::repository_config (
+					clap_matches),
 
 			chunks_per_bundle:
 				args::u64_required (
@@ -855,6 +1064,11 @@ command! (
 				args::duration_required (
 					& clap_matches,
 					"sleep-time"),
+
+			cluster_backups:
+				args::bool_flag (
+					& clap_matches,
+					"cluster-backups"),
 
 		};
 

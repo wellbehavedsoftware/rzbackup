@@ -3,12 +3,18 @@ use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 use std::path::PathBuf;
+use std::slice;
 
-use rust_crypto::sha1::Sha1;
+use futures::Future;
+use futures_cpupool::CpuPool;
+
+use num_cpus;
 
 use output::Output;
 
 use protobuf::stream::CodedInputStream;
+
+use rust_crypto::sha1::Sha1;
 
 use rustc_serialize::hex::ToHex;
 
@@ -382,6 +388,37 @@ pub fn collect_chunks_from_backup (
 	backup_name: & Path,
 ) -> Result <(), String> {
 
+	collect_chunks_from_backup_real (
+		repository,
+		chunk_ids,
+		backup_name,
+		false,
+	)
+
+}
+
+pub fn collect_recursive_chunks_from_backup (
+	repository: & Repository,
+	chunk_ids: & mut HashSet <ChunkId>,
+	backup_name: & Path,
+) -> Result <(), String> {
+
+	collect_chunks_from_backup_real (
+		repository,
+		chunk_ids,
+		backup_name,
+		true,
+	)
+
+}
+
+fn collect_chunks_from_backup_real (
+	repository: & Repository,
+	chunk_ids: & mut HashSet <ChunkId>,
+	backup_name: & Path,
+	recursive_only: bool,
+) -> Result <(), String> {
+
 	// load backup
 
 	let backup_info =
@@ -405,7 +442,14 @@ pub fn collect_chunks_from_backup (
 		Cursor::new (
 			backup_info.backup_data ().to_owned ());
 
-	for _iteration in 0 .. backup_info.iterations () {
+	let iterations =
+		if recursive_only {
+			backup_info.iterations () - 1
+		} else {
+			backup_info.iterations ()
+		};
+
+	for _iteration in 0 .. iterations {
 
 		let mut temp_output: Cursor <Vec <u8>> =
 			Cursor::new (
@@ -477,5 +521,178 @@ pub fn collect_chunks_from_instructions (
 	Ok (())
 
 }
+
+pub fn get_recursive_chunks (
+	output: & Output,
+	repository: & Repository,
+	backup_files: & Vec <PathBuf>,
+) -> Result <HashSet <ChunkId>, String> {
+
+	let output_job =
+		output_job_start! (
+			output,
+			"Reading backups");
+
+	struct State <'a> {
+		backup_files_iterator: slice::Iter <'a, PathBuf>,
+		backup_chunk_ids: HashSet <ChunkId>,
+		backup_count: u64,
+	}
+
+	let mut state = State {
+		backup_files_iterator: backup_files.iter (),
+		backup_chunk_ids: HashSet::new (),
+		backup_count: 0,
+	};
+
+	let backup_total = backup_files.len () as u64;
+
+	let num_threads =
+		(num_cpus::get () - 1) * 5 / 3 + 1;
+
+	let cpu_pool =
+		CpuPool::new (
+			num_threads);
+
+	concurrent_controller (
+		output,
+		num_threads,
+		& mut state,
+
+		|state| {
+
+			if let Some (backup_file) =
+				state.backup_files_iterator.next () {
+
+				output_job.progress (
+					state.backup_count,
+					backup_total);
+
+				state.backup_count += 1;
+
+				let output =
+					output.clone ();
+
+				let repository =
+					repository.clone ();
+
+				let backup_file =
+					backup_file.to_owned ();
+
+				Some (
+					cpu_pool.spawn_fn (move || {
+
+						let mut backup_chunk_ids: HashSet <ChunkId> =
+							HashSet::new ();
+
+						let output_job =
+							output_job_start! (
+								output,
+								"Reading {}",
+								backup_file.to_string_lossy ());
+
+						collect_recursive_chunks_from_backup (
+							& repository,
+							& mut backup_chunk_ids,
+							& backup_file,
+						) ?;
+
+						output_job.remove ();
+
+						Ok (backup_chunk_ids)
+
+					}).boxed ()
+				)
+
+			} else {
+
+				None
+
+			}
+
+		},
+
+		|state, backup_chunk_ids| {
+
+			for backup_chunk_id in backup_chunk_ids {
+
+				state.backup_chunk_ids.insert (
+					backup_chunk_id);
+
+			}
+
+			Ok (())
+
+		},
+
+	) ?;
+
+	output_job_replace! (
+		output_job,
+		"Found {} chunks required to expand backups",
+		state.backup_chunk_ids.len ());
+
+	Ok (state.backup_chunk_ids)
+
+}
+
+pub fn scan_backups (
+	output: & Output,
+	repository_path: & Path,
+) -> Result <Vec <PathBuf>, String> {
+
+	let output_job =
+		output_job_start! (
+			output,
+			"Scanning backups");
+
+	let backup_files =
+		scan_backup_files (
+			repository_path,
+		) ?;
+
+	output_job_replace! (
+		output_job,
+		"Found {} backup files",
+		backup_files.len ());
+
+	Ok (backup_files)
+
+}
+
+macro_rules! scan_indexes_with_sizes {
+
+	(
+		$ output : expr,
+		$ repository_path : expr,
+		$ index_ids_and_sizes : ident,
+		$ total_index_size : ident,
+	) => {
+
+		let output_job =
+			output_job_start! (
+				$ output,
+				"Scanning indexes");
+
+		let $ index_ids_and_sizes =
+			scan_index_files_with_sizes (
+				& $ repository_path,
+			) ?;
+
+		let $ total_index_size: u64 =
+			$ index_ids_and_sizes.iter ().map (
+				|& (_, old_index_size)|
+				old_index_size
+			).sum ();
+
+		output_job_replace! (
+			output_job,
+			"Found {} index files",
+			$ index_ids_and_sizes.len ());
+
+	}
+
+}
+
 
 // ex: noet ts=4 filetype=rust

@@ -3,7 +3,11 @@ use std::time::Duration;
 
 use clap;
 
+use num_cpus;
+
 use regex::Regex;
+
+use zbackup::repository::*;
 
 pub fn bool_flag (
 	matches: & clap::ArgMatches,
@@ -171,6 +175,155 @@ pub fn error_exit (
 		kind: clap::ErrorKind::InvalidValue,
 		info: None,
 	}.exit ()
+
+}
+
+pub trait ClapSubCommandRzbackupArgs {
+
+	fn repository_config_args (
+		self,
+	) -> Self;
+
+}
+
+impl <'a, 'b> ClapSubCommandRzbackupArgs
+for clap::App <'a, 'b> {
+
+	fn repository_config_args (
+		self,
+	) -> Self {
+
+		lazy_static! {
+
+			static ref DEFAULT_MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES_STRING: String =
+				::MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES.to_string ();
+
+			static ref DEFAULT_MAX_COMPRESSED_MEMORY_CACHE_ENTRIES_STRING: String =
+				::MAX_COMPRESSED_MEMORY_CACHE_ENTRIES.to_string ();
+
+			static ref DEFAULT_MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES_STRING: String =
+				::MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES.to_string ();
+
+			static ref DEFAULT_MAX_THREADS_STRING: String =
+				num_cpus::get ().to_string ();
+
+			static ref DEFAULT_FILESYSTEM_CACHE_PATH_STRING: String =
+				::FILESYSTEM_CACHE_PATH.to_string ();
+
+		}
+
+		self
+
+			.arg (
+				clap::Arg::with_name ("max-uncompressed-memory-cache-entries")
+
+				.long ("max-uncompressed-memory-cache-entries")
+				.value_name ("ENTRIES")
+				.default_value (
+					& DEFAULT_MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES_STRING)
+				.help ("Size of very high speed, very high cost, in-memory \
+					cache of uncompressed cache entries.")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("max-compressed-memory-cache-entries")
+
+				.long ("max-compressed-memory-cache-entries")
+				.value_name ("ENTRIES")
+				.default_value (
+					& DEFAULT_MAX_COMPRESSED_MEMORY_CACHE_ENTRIES_STRING)
+				.help ("Size of high speed, high cost, in memory cache of \
+					compressed cache entries.")
+
+			)
+
+			.arg (
+
+				clap::Arg::with_name ("max-compressed-filesystem-cache-entries")
+
+				.long ("max-compressed-filesystem-cache-entries")
+				.value_name ("ENTRIES")
+				.default_value (
+					& DEFAULT_MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES_STRING)
+				.help ("Size of medium speed, low cost, on-disk cache of \
+					compressed cache entries.")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("max-threads")
+
+				.long ("max-threads")
+				.value_name ("THREADS")
+				.default_value (
+					& DEFAULT_MAX_THREADS_STRING)
+				.help ("Number of worker threads to execute. The default value \
+					is determined by the number of CPU threads reported by the \
+					operating system.")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("filesystem-cache-path")
+
+				.long ("filesystem-cache-path")
+				.value_name ("PATH")
+				.default_value (
+					& DEFAULT_FILESYSTEM_CACHE_PATH_STRING)
+				.help ("Location of the filesystem cache. This will be used to \
+					store chunks which have been decompressed, typically from \
+					slow but efficient LZMA compressed bundles, and \
+					recompressed using LZO, then saved to disk and managed \
+					individually using an LRU cache algorithm.")
+
+			)
+
+
+	}
+
+}
+
+pub fn repository_config (
+	clap_matches: & clap::ArgMatches,
+) -> RepositoryConfig {
+
+	RepositoryConfig {
+
+		max_uncompressed_memory_cache_entries:
+			u64_required (
+				clap_matches,
+				"max-uncompressed-memory-cache-entries",
+			) as usize,
+
+		max_compressed_memory_cache_entries:
+			u64_required (
+				clap_matches,
+				"max-compressed-memory-cache-entries",
+			) as usize,
+
+		max_compressed_filesystem_cache_entries:
+			u64_required (
+				clap_matches,
+				"max-compressed-filesystem-cache-entries",
+			) as usize,
+
+		max_threads:
+			u64_required (
+				clap_matches,
+				"max-threads",
+			) as usize,
+
+		filesystem_cache_path:
+			path_required (
+				clap_matches,
+				"filesystem-cache-path",
+			).to_string_lossy ().to_string (),
+
+		work_jobs_total: 0, // deprecated and ignored
+		work_jobs_batch: 0, // deprecated and ignored
+
+	}
 
 }
 

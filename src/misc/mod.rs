@@ -5,6 +5,7 @@ mod command;
 
 mod atomic_file_writer;
 mod cloning_shared_future;
+mod concurrent_controller;
 mod error;
 mod io;
 mod protobuf;
@@ -12,6 +13,7 @@ mod protobuf;
 pub use self::atomic_file_writer::*;
 pub use self::cloning_shared_future::*;
 pub use self::command::*;
+pub use self::concurrent_controller::*;
 pub use self::error::*;
 pub use self::io::*;
 pub use self::protobuf::*;

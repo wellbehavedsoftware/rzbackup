@@ -1,5 +1,6 @@
 // declare modules
 
+#[ macro_use ]
 pub mod utils;
 
 mod balance_bundles;

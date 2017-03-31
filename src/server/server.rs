@@ -5,14 +5,13 @@ use std::thread;
 
 use clap;
 
-use num_cpus;
-
 use output::Output;
 
 pub use server::handler::handle_client;
 
-use ::zbackup::repository::*;
-use ::misc::*;
+use zbackup::repository::*;
+use misc::*;
+use misc::args::ClapSubCommandRzbackupArgs;
 
 pub fn run_server (
 	output: & Output,
@@ -103,49 +102,6 @@ pub fn run_server_listener (
 
 }
 
-fn repository_config_parse (
-	clap_matches: & clap::ArgMatches,
-) -> RepositoryConfig {
-
-	RepositoryConfig {
-
-		max_uncompressed_memory_cache_entries:
-			args::u64_required (
-				clap_matches,
-				"max-uncompressed-memory-cache-entries",
-			) as usize,
-
-		max_compressed_memory_cache_entries:
-			args::u64_required (
-				clap_matches,
-				"max-compressed-memory-cache-entries",
-			) as usize,
-
-		max_compressed_filesystem_cache_entries:
-			args::u64_required (
-				clap_matches,
-				"max-compressed-filesystem-cache-entries",
-			) as usize,
-
-		max_threads:
-			args::u64_required (
-				clap_matches,
-				"max-threads",
-			) as usize,
-
-		filesystem_cache_path:
-			args::path_required (
-				clap_matches,
-				"filesystem-cache-path",
-			).to_string_lossy ().to_string (),
-
-		work_jobs_total: 0, // deprecated and ignored
-		work_jobs_batch: 0, // deprecated and ignored
-
-	}
-
-}
-
 command! (
 
 	name = server,
@@ -159,25 +115,6 @@ command! (
 	},
 
 	clap_subcommand = {
-
-		lazy_static! {
-
-			static ref DEFAULT_MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES_STRING: String =
-				::MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES.to_string ();
-
-			static ref DEFAULT_MAX_COMPRESSED_MEMORY_CACHE_ENTRIES_STRING: String =
-				::MAX_COMPRESSED_MEMORY_CACHE_ENTRIES.to_string ();
-
-			static ref DEFAULT_MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES_STRING: String =
-				::MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES.to_string ();
-
-			static ref DEFAULT_MAX_THREADS_STRING: String =
-				num_cpus::get ().to_string ();
-
-			static ref DEFAULT_FILESYSTEM_CACHE_PATH_STRING: String =
-				::FILESYSTEM_CACHE_PATH.to_string ();
-
-		}
 
 		clap::SubCommand::with_name ("server")
 			.about ("Server component")
@@ -214,70 +151,7 @@ command! (
 
 			)
 
-			.arg (
-				clap::Arg::with_name ("max-uncompressed-memory-cache-entries")
-
-				.long ("max-uncompressed-memory-cache-entries")
-				.value_name ("ENTRIES")
-				.default_value (
-					& DEFAULT_MAX_UNCOMPRESSED_MEMORY_CACHE_ENTRIES_STRING)
-				.help ("Size of very high speed, very high cost, in-memory \
-					cache of uncompressed cache entries.")
-
-			)
-
-			.arg (
-				clap::Arg::with_name ("max-compressed-memory-cache-entries")
-
-				.long ("max-compressed-memory-cache-entries")
-				.value_name ("ENTRIES")
-				.default_value (
-					& DEFAULT_MAX_COMPRESSED_MEMORY_CACHE_ENTRIES_STRING)
-				.help ("Size of high speed, high cost, in memory cache of \
-					compressed cache entries.")
-
-			)
-
-			.arg (
-
-				clap::Arg::with_name ("max-compressed-filesystem-cache-entries")
-
-				.long ("max-compressed-filesystem-cache-entries")
-				.value_name ("ENTRIES")
-				.default_value (
-					& DEFAULT_MAX_COMPRESSED_FILESYSTEM_CACHE_ENTRIES_STRING)
-				.help ("Size of medium speed, low cost, on-disk cache of \
-					compressed cache entries.")
-
-			)
-
-			.arg (
-				clap::Arg::with_name ("max-threads")
-
-				.long ("max-threads")
-				.value_name ("THREADS")
-				.default_value (
-					& DEFAULT_MAX_THREADS_STRING)
-				.help ("Number of worker threads to execute. The default value \
-					is determined by the number of CPU threads reported by the \
-					operating system.")
-
-			)
-
-			.arg (
-				clap::Arg::with_name ("filesystem-cache-path")
-
-				.long ("filesystem-cache-path")
-				.value_name ("PATH")
-				.default_value (
-					& DEFAULT_FILESYSTEM_CACHE_PATH_STRING)
-				.help ("Location of the filesystem cache. This will be used to \
-					store chunks which have been decompressed, typically from \
-					slow but efficient LZMA compressed bundles, and \
-					recompressed using LZO, then saved to disk and managed \
-					individually using an LRU cache algorithm.")
-
-			)
+			.repository_config_args ()
 
 			.arg (
 				clap::Arg::with_name ("work-jobs-total")
@@ -318,7 +192,7 @@ command! (
 					"password-file"),
 
 			repository_config:
-				repository_config_parse (
+				args::repository_config (
 					clap_matches),
 
 			listen_address:
