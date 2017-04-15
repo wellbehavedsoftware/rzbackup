@@ -1,8 +1,16 @@
+use std::fs;
 use std::path::PathBuf;
+use std::slice;
 
 use clap;
 
+use futures::Future;
+use futures_cpupool::CpuPool;
+
+use num_cpus;
+
 use output::Output;
+use output::OutputJob;
 
 use ::convert::utils::*;
 use ::misc::*;
@@ -39,7 +47,7 @@ pub fn check_bundles (
 
 	// get a list of index files
 
-	let bundle_ids_and_sizes: Vec <(BundleId, u64)> =
+	let mut bundle_ids_and_sizes: Vec <(BundleId, u64)> =
 		scan_bundle_files_with_sizes (
 			& arguments.repository_path,
 		) ?.into_iter ().filter (
@@ -51,6 +59,9 @@ pub fn check_bundles (
 				arguments.bundle_name_prefix.as_ref ().unwrap ())
 
 		).collect ();
+
+	bundle_ids_and_sizes.sort_by_key (
+		|& (bundle_id, _bundle_size)| bundle_id);
 
 	let bundle_total_size: u64 =
 		bundle_ids_and_sizes.iter ().map (
@@ -65,74 +76,23 @@ pub fn check_bundles (
 
 	// check bundles
 
-	let mut checked_bundle_size: u64 = 0;
+	let num_threads =
+		(num_cpus::get () - 1) * 5 / 3 + 1;
 
-	let output_job =
-		output_job_start! (
+	let cpu_pool =
+		CpuPool::new (
+			num_threads);
+
+	let invalid_bundle_count =
+		check_bundles_real (
 			output,
-			"{} bundles",
-			if arguments.repair { "Reparing" } else { "Checking" });
-
-	let mut invalid_bundle_count: u64 = 0;
-
-	for (
-		bundle_id,
-		bundle_size,
-	) in bundle_ids_and_sizes {
-
-		output_job.progress (
-			checked_bundle_size,
-			bundle_total_size);
-
-		// read the bundle
-
-		let bundle_path =
-			repository_core.bundle_path (
-				bundle_id);
-
-		match bundle_read_path (
-			bundle_path,
-			repository_core.encryption_key (),
-		) {
-
-			Ok (_bundle_chunks) => {
-
-				// TODO
-
-			},
-
-			Err (error) => {
-
-				output.message (
-					error);
-
-				invalid_bundle_count += 1;
-
-			},
-
-		}
-
-		// loop
-
-		checked_bundle_size +=
-			bundle_size;
-
-	}
-
-	if invalid_bundle_count > 0 {
-
-		output_job_replace! (
-			output_job,
-			"Found {} invalid bundle files",
-			invalid_bundle_count);
-
-	} else {
-
-		output_job_replace! (
-			output_job,
-			"No problems found");
-
-	}
+			& cpu_pool,
+			num_threads,
+			arguments,
+			repository_core.clone (),
+			& bundle_ids_and_sizes,
+			bundle_total_size,
+		) ?;
 
 	// write changes to disk
 
@@ -144,6 +104,200 @@ pub fn check_bundles (
 
 }
 
+fn check_bundles_real (
+	output: & Output,
+	cpu_pool: & CpuPool,
+	max_tasks: usize,
+	arguments: & CheckBundlesArguments,
+	repository_core: RepositoryCore,
+	bundle_ids_and_sizes: & Vec <(BundleId, u64)>,
+	bundle_total_size: u64,
+) -> Result <u64, String> {
+
+	// check bundles
+
+	struct Task {
+		bundle_size: u64,
+		output_job: OutputJob,
+		result: Result <(), String>,
+	}
+
+	struct State <'a> {
+		bundle_ids_and_sizes_iterator: slice::Iter <'a, (BundleId, u64)>,
+		checked_bundle_size: u64,
+		invalid_bundle_count: u64,
+		output_job: OutputJob,
+	}
+
+	let output_job =
+		output_job_start! (
+			output,
+			"Checking bundles");
+
+	let mut state = State {
+		output_job: output_job,
+		bundle_ids_and_sizes_iterator: bundle_ids_and_sizes.iter (),
+		checked_bundle_size: 0,
+		invalid_bundle_count: 0,
+	};
+
+	// concurrent operation
+
+	concurrent_controller (
+		output,
+		max_tasks,
+		& mut state,
+
+		|state| {
+
+			if let Some (& (bundle_id, bundle_size)) =
+				state.bundle_ids_and_sizes_iterator.next () {
+
+				let output =
+					output.clone ();
+
+				let repository_core =
+					repository_core.clone ();
+
+				let move_broken =
+					arguments.move_broken;
+
+				Some (cpu_pool.spawn_fn (move || {
+
+					let output_job =
+						output_job_start! (
+							output,
+							"Checking bundle {}",
+							bundle_id);
+
+					Ok (Task {
+						bundle_size: bundle_size,
+						output_job: output_job,
+						result: check_bundle (
+							repository_core,
+							move_broken,
+							bundle_id,
+						),
+					})
+
+				}).boxed ())
+
+			} else { None }
+
+		},
+
+		|state, task_value| {
+
+			state.checked_bundle_size +=
+				task_value.bundle_size;
+
+			state.output_job.progress (
+				state.checked_bundle_size,
+				bundle_total_size);
+
+			if let Err (error) = task_value.result {
+
+				output.message (
+					error);
+
+				state.invalid_bundle_count += 1;
+
+			}
+
+			task_value.output_job.remove ();
+
+			Ok (())
+
+		},
+
+	) ?;
+
+	if state.invalid_bundle_count > 0 {
+
+		output_job_replace! (
+			state.output_job,
+			"Found {} invalid bundle files",
+			state.invalid_bundle_count);
+
+	} else {
+
+		output_job_replace! (
+			state.output_job,
+			"No problems found");
+
+	}
+
+	Ok (state.invalid_bundle_count)
+
+}
+
+fn check_bundle (
+	repository_core: RepositoryCore,
+	move_broken: bool,
+	bundle_id: BundleId,
+) -> Result <(), String> {
+
+	let bundle_path =
+		repository_core.bundle_path (
+			bundle_id);
+
+	match bundle_read_path (
+		& bundle_path,
+		repository_core.encryption_key (),
+	) {
+
+		Ok (_bundle_chunks) =>
+			Ok (()),
+
+		Err (error) => {
+
+			if move_broken {
+
+				let bundles_broken_path =
+					repository_core.path ()
+						.join ("bundles-broken");
+
+				io_result (
+					fs::create_dir_all (
+						& bundles_broken_path),
+				).map_err (
+					|error|
+
+					format! (
+						"Error creating {}: {}",
+						bundles_broken_path.to_string_lossy (),
+						error)
+
+				) ?;
+
+				let bundle_broken_path =
+					bundles_broken_path.join (
+						bundle_path.file_name ().unwrap ());
+
+				rename_or_copy_and_delete (
+					& bundle_path,
+					& bundle_broken_path,
+				).map_err (
+					|error|
+
+					format! (
+						"Error moving {} to {}: {}",
+						bundle_path.to_string_lossy (),
+						bundle_broken_path.to_string_lossy (),
+						error)
+
+				) ?;
+
+			}
+
+			Err (error)
+
+		},
+
+	}
+
+}
+
 command! (
 
 	name = check_bundles,
@@ -152,8 +306,8 @@ command! (
 	arguments = CheckBundlesArguments {
 		repository_path: PathBuf,
 		password_file_path: Option <PathBuf>,
+		move_broken: bool,
 		bundle_name_prefix: Option <String>,
-		repair: bool,
 	},
 
 	clap_subcommand = {
@@ -178,6 +332,14 @@ command! (
 				.value_name ("PASSWORD-FILE")
 				.required (false)
 				.help ("Path to the password file")
+
+			)
+
+			.arg (
+				clap::Arg::with_name ("move-broken")
+
+				.long ("move-broken")
+				.help ("Move broken bundles to bundles-broken directory")
 
 			)
 
@@ -207,12 +369,15 @@ command! (
 					& clap_matches,
 					"password-file"),
 
+			move_broken:
+				args::bool_flag (
+					& clap_matches,
+					"move-broken"),
+
 			bundle_name_prefix:
 				args::string_optional (
 					& clap_matches,
 					"bundle-name-prefix"),
-
-			repair: false,
 
 		}
 
